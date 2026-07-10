@@ -8,6 +8,7 @@
 
 | 순서 | 항목 | 상태 | 브랜치 | 로그 |
 |---|---|---|---|---|
+| 0 | 프로젝트 셋업 (빌드 도구, DB/Flyway/Testcontainers/springdoc 의존성) | 🔲 | feature/project-setup | docs/logs/project-setup.md |
 | 1 | 커피 메뉴 목록 조회 | 🔲 | feature/menu-list | docs/logs/menu-list.md |
 | 2 | 포인트 충전 (비관적 락 포함) | 🔲 | feature/point-charge | docs/logs/point-charge.md |
 | 3 | 주문/결제 (비관적 락 + 실시간 전송 포함) | 🔲 | feature/order | docs/logs/order.md |
@@ -15,6 +16,7 @@
 | 5 | 동시성 검증 테스트 (2·3 완료 후) | 🔲 | feature/concurrency-test | docs/logs/concurrency-test.md |
 | 6 | 다수 인스턴스 검증 (docker-compose + nginx) | 🔲 | feature/multi-instance | docs/logs/multi-instance.md |
 
+- 0번은 다른 모든 항목이 얹히는 선행 작업이다 — Spring Boot 프로젝트 골격에 `strategy.md` 7장이 확정한 MySQL/Flyway/Testcontainers/springdoc-openapi 의존성을 추가하고 빌드되는지까지 확인한다. 데이터 접근 방식은 Spring Data JPA로 한다 (엔티티가 `table-spec.md`와 1:1 대응, 락은 `@Lock(PESSIMISTIC_WRITE)`로 표현).
 - **2·3번은 구현 시점에 이미 `strategy.md` 5.1의 비관적 락을 포함한다.** 락을 나중에(5번에서) 추가하는 게 아니다 — 5번은 그 락이 동시 요청에서도 정합성을 지키는지 `ExecutorService`로 검증하는 별도 테스트 단계다.
 - 6번은 1~4번 API가 모두 구현된 뒤, 상태를 공유 MySQL에만 두는 stateless 설계(`strategy.md` 4장)가 실제로 다중 인스턴스에서 동작하는지 시연하는 단계다.
 

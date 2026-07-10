@@ -88,6 +88,7 @@
 |---|---|---|
 | 언어/프레임워크 | Spring Boot (Java) | 익숙한 스택으로 설계 깊이에 집중, 분산 락·트랜잭션 관리 생태계 성숙 |
 | DB | MySQL | 다중 인스턴스 환경에서 단일 공유 진실 원천(source of truth) 역할, 비관적 락 지원 |
+| 데이터 접근 | Spring Data JPA | 엔티티가 `table-spec.md`와 1:1 대응해 가독성이 좋고, `@Lock(PESSIMISTIC_WRITE)`로 5.1의 비관적 락을 선언적으로 표현 가능. 인기 메뉴 집계 같은 복잡한 조회는 JPQL/QueryDSL로 보완 |
 | 마이그레이션 | Flyway | 메뉴 시드 데이터와 스키마 변경 이력을 코드로 관리 |
 | API 문서 | springdoc-openapi | 코드와 문서 어긋남 방지, 자동 생성 |
 | 테스트 DB | Testcontainers (MySQL) | 락/트랜잭션 동작을 운영 환경과 동일하게 검증 |
