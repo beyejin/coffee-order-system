@@ -8,7 +8,7 @@
 
 | 순서 | 항목 | 상태 | 브랜치 | 로그 |
 |---|---|---|---|---|
-| 0 | 프로젝트 셋업 (빌드 도구, DB/Flyway/Testcontainers/springdoc 의존성) | 🔲 | feature/project-setup | docs/logs/project-setup.md |
+| 0 | 프로젝트 셋업 (빌드 도구, DB/Flyway/Testcontainers/springdoc 의존성) | 🔨 | feature/project-setup | docs/logs/project-setup.md |
 | 1 | 커피 메뉴 목록 조회 | 🔲 | feature/menu-list | docs/logs/menu-list.md |
 | 2 | 포인트 충전 (비관적 락 포함) | 🔲 | feature/point-charge | docs/logs/point-charge.md |
 | 3 | 주문/결제 (비관적 락 + 실시간 전송 포함) | 🔲 | feature/order | docs/logs/order.md |
