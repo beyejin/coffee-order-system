@@ -5,7 +5,7 @@
 ## 문서
 
 - [설계 의도 · 문제 해결 전략](docs/strategy.md)
-- [ERD](docs/erd.md)
+- [테이블 명세](docs/table-spec.md)
 - [API 명세서](docs/api-spec.md)
 
 ## 진행 상태

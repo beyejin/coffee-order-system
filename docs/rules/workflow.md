@@ -2,9 +2,21 @@
 
 기능 단위(API 하나, 도전 요구사항 항목 하나) 작업은 Plan → Generate → Evaluate 3단계를 매번 거친다. 한 번에 Generate로 건너뛰지 않는다.
 
+## 작업 순서
+
+전체 중 어디까지 왔는지 보는 인덱스다. 상태는 🔲(미착수) → 🔨(진행중) → ✅(main 병합 완료) 순으로만 갱신한다. 각 항목의 세부 시도 이력은 `docs/logs/{기능}.md` 참고.
+
+| 순서 | 항목 | 상태 | 브랜치 | 로그 |
+|---|---|---|---|---|
+| 1 | 커피 메뉴 목록 조회 | 🔲 | feature/menu-list | docs/logs/menu-list.md |
+| 2 | 포인트 충전 | 🔲 | feature/point-charge | docs/logs/point-charge.md |
+| 3 | 주문/결제 | 🔲 | feature/order | docs/logs/order.md |
+| 4 | 인기 메뉴 조회 | 🔲 | feature/popular-menu | docs/logs/popular-menu.md |
+| 5 | 동시성 테스트 | 🔲 | feature/concurrency-test | docs/logs/concurrency-test.md |
+
 ## Plan — 여기까지만 한다
 
-- `docs/strategy.md` / `erd.md` / `api-spec.md`(및 `docs/rules/policy.md`)를 근거로 구현 계획을 짧게 서술한다: 무엇을, 왜, 어떤 케이스(해피패스 + 예외)를 다룰지.
+- `docs/strategy.md` / `table-spec.md` / `api-spec.md`(및 `docs/rules/policy.md`)를 근거로 구현 계획을 짧게 서술한다: 무엇을, 왜, 어떤 케이스(해피패스 + 예외)를 다룰지.
 - **코드를 쓰지 않는다.** 계획 단계의 산출물은 문장/체크리스트다.
 - 문서에 근거가 없는 판단이 필요하면 여기서 멈추고 사용자에게 질문한다. 특히 `policy.md`의 "보류 항목"에 해당하면 반드시 멈춘다.
 - 이미 튜터 설계 점검 전이라면, 엔티티 추가/삭제·API 시그니처 변경처럼 문서의 구조 자체를 바꾸는 계획은 세우지 않는다 (`conventions.md`의 문서 갱신 순서 참고).

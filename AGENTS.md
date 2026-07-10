@@ -14,11 +14,18 @@
 
 | 지금 하려는 일 | 읽을 문서 |
 |---|---|
-| 기능을 구현하려 한다 (Plan/Generate/Evaluate 단계 경계가 궁금하다) | [`docs/rules/workflow.md`](docs/rules/workflow.md) |
-| 문서를 쓰거나 커밋 메시지를 작성한다 | [`docs/rules/conventions.md`](docs/rules/conventions.md) |
-| 도메인 규칙이 맞는지 헷갈린다 (Order에 status 넣어도 되나? 등), 동시성/이벤트전송/인기메뉴 같은 보류 항목을 건드리려 한다 | [`docs/rules/policy.md`](docs/rules/policy.md) |
-| 브랜치를 만들거나 main에 병합한다 | [`docs/rules/branch.md`](docs/rules/branch.md) |
-| Evaluate 결과(성공/실패 시도)를 기록한다 | [`docs/rules/logs.md`](docs/rules/logs.md) |
-| 테이블 구조가 궁금하다 | [`docs/erd.md`](docs/erd.md) |
-| API 요청/응답/에러코드가 궁금하다 | [`docs/api-spec.md`](docs/api-spec.md) |
-| 설계 배경, 트레이드오프, 기술 선택 이유가 궁금하다 | [`docs/strategy.md`](docs/strategy.md) |
+| 테이블 구조가 궁금하다 | [`docs/table-spec.md`](docs/table-spec.md) |
+
+[//]: # (| 기능을 구현하려 한다 &#40;Plan/Generate/Evaluate 단계 경계가 궁금하다&#41; | [``]&#40;docs/rules/workflow.md&#41; |)
+
+[//]: # (| 문서를 쓰거나 커밋 메시지를 작성한다 | [`docs/rules/conventions.md`]&#40;docs/rules/conventions.md&#41; |)
+
+[//]: # (| 도메인 규칙이 맞는지 헷갈린다 &#40;Order에 status 넣어도 되나? 등&#41;, 동시성/이벤트전송/인기메뉴 같은 보류 항목을 건드리려 한다 | [`docs/rules/policy.md`]&#40;docs/rules/policy.md&#41; |)
+
+[//]: # (| 브랜치를 만들거나 main에 병합한다 | [`docs/rules/branch.md`]&#40;docs/rules/branch.md&#41; |)
+
+[//]: # (| Evaluate 결과&#40;성공/실패 시도&#41;를 기록한다 | [`docs/rules/logs.md`]&#40;docs/rules/logs.md&#41; |)
+
+[//]: # (| API 요청/응답/에러코드가 궁금하다 | [`docs/api-spec.md`]&#40;docs/api-spec.md&#41; |)
+
+[//]: # (| 설계 배경, 트레이드오프, 기술 선택 이유가 궁금하다 | [`docs/strategy.md`]&#40;docs/strategy.md&#41; |)

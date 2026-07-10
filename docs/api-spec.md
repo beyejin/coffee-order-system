@@ -131,4 +131,4 @@
 }
 ```
 
-집계 방식은 `strategy.md` 5.3 및 `erd.md`의 "미확정 사항" 참고 (초기 구현은 실시간 `GROUP BY`).
+집계 방식은 `strategy.md` 5.3 및 `policy.md`의 "보류 항목" 참고 (초기 구현은 실시간 `GROUP BY`).
