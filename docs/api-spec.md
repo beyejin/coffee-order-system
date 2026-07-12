@@ -102,7 +102,8 @@
     "menuId": 1,
     "price": 4500,
     "remainingBalance": 5500
-  }
+  },
+  "error": null
 }
 ```
 
@@ -111,13 +112,16 @@
 2. 잔액 검증 (부족하면 409 `INSUFFICIENT_POINT`, 이 경우 `orders` row 생성 안 됨)
 3. 하나의 트랜잭션에서: `orders` INSERT + `User.balance` 차감 + `PointHistory`(USE) INSERT
 4. 데이터 수집 플랫폼으로 주문 내역 전송
-   - 학습 단계: 트랜잭션 내 동기 Mock 호출로 장애 영향을 재현
-   - 최종 단계: 실패 테스트 후 `strategy.md` 5.2의 결정 게이트에 따라 확정
+   - DB 커밋 후 `AFTER_COMMIT` 이벤트를 비동기로 처리
+   - 사용자 ID, 메뉴 ID, 결제금액을 Mock client로 전송
+   - 외부 실패는 주문 응답과 이미 커밋된 DB를 변경하지 않음
+   - 현재는 재시도·영속 이벤트가 없어 전송 유실 가능성이 있음
 
 **실패 케이스**
 - 존재하지 않는 `menuId` → 404 `MENU_NOT_FOUND`
 - 존재하지 않는 `userId` → 404 `USER_NOT_FOUND`
 - 잔액 부족 → 409 `INSUFFICIENT_POINT`
+- 잘못된 JSON, 빈 요청 본문, 누락된 ID → 400 `VALIDATION_ERROR`
 
 ---
 
