@@ -26,11 +26,13 @@
 
 ## 구현 게이트
 
-기능 작업은 `Plan → Generate → Evaluate → Explain` 순서를 따른다.
+기능 작업은 `Plan → Issue → Branch → Generate → Evaluate → Explain` 순서를 따른다.
 
 1. **Plan**: 사용자가 불변식·트랜잭션 경계·예외 케이스를 설명한다. AI는 반례를 찾는다.
-2. **Generate**: 확정한 범위의 코드와 테스트만 작성한다.
-3. **Evaluate**: 실제 MySQL Testcontainers로 실행하고 결과를 기록한다.
-4. **Explain**: 선택 이유, 동시 요청, 실패 시 롤백을 사용자가 설명할 수 있어야 완료한다.
+2. **Issue**: 확정한 Plan과 완료 조건으로 GitHub 이슈를 생성한다. 이슈가 없으면 코드 변경을 시작하지 않는다.
+3. **Branch**: `main`에서 이슈 번호를 포함한 작업 브랜치를 생성하고 체크아웃한다.
+4. **Generate**: 확정한 범위의 코드와 테스트만 작성한다.
+5. **Evaluate**: 실제 MySQL Testcontainers로 실행하고 결과를 기록한다.
+6. **Explain**: 선택 이유, 동시 요청, 실패 시 롤백을 사용자가 설명할 수 있어야 완료한다.
 
 문서에 없는 판단이나 `policy.md`의 미확정 항목이 필요하면 구현 전에 질문한다.
