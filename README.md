@@ -32,6 +32,26 @@ DB_PORT=13306 docker compose up -d mysql
 DB_URL=jdbc:mysql://localhost:13306/coffee ./gradlew bootRun
 ```
 
+두 애플리케이션 인스턴스와 nginx gateway를 함께 실행하려면 다음 명령을 사용합니다. gateway 기본 포트는 로컬 개발 포트와 겹치지 않는 `18080`입니다.
+
+```bash
+export COMPOSE_PROJECT_NAME="coffee-order-verify-$(date +%s)"
+export DB_PORT=13316
+export GATEWAY_PORT=18081
+export GATEWAY_URL="http://localhost:${GATEWAY_PORT}"
+
+docker compose up -d --build --wait
+./scripts/multi-instance-smoke.sh
+docker compose logs nginx
+docker compose down -v --remove-orphans
+```
+
+`13316`이나 `18081`을 이미 사용 중이면 각각 다른 빈 포트로 바꿉니다. 위 변수는 같은 셸에서 export한 상태로 기동·smoke·로그·종료까지 유지해야 합니다.
+
+Smoke 자동 검증에는 `curl`, `python3`, Docker Compose가 필요합니다. 스크립트는 시작 시 공유 DB가 잔액 0P·주문 0건·이력 0건인 fresh 상태인지 먼저 확인하고, HTTP 응답 값, 개발 검증용 `X-Upstream-Addr` 헤더를 통한 두 upstream 분산, 최종 공유 DB 상태를 검사합니다. 하나라도 다르면 `SMOKE FAIL` 메시지와 비정상 종료 코드를 반환합니다. `COMPOSE_PROJECT_NAME`은 기동·smoke·로그·종료 명령에서 같은 고유 값을 사용해야 합니다.
+
+일반 로컬 개발에서 `docker compose up -d mysql`로 MySQL만 실행한 경우 `docker compose down`을 사용하면 데이터 볼륨을 보존합니다. 위의 격리된 smoke 검증은 매번 fresh DB가 필요하므로 고유 프로젝트 이름을 사용하고 반드시 `docker compose down -v --remove-orphans`로 검증 볼륨까지 정리합니다.
+
 ## 요구사항과 범위
 
 | 기능 | API | 핵심 제약 |
@@ -95,7 +115,7 @@ erDiagram
         BIGINT user_id FK
         BIGINT menu_id FK
         BIGINT price
-        DATETIME created_at
+        DATETIME(6) created_at
     }
 ```
 
@@ -122,6 +142,7 @@ erDiagram
 | 마이그레이션 | Flyway | 스키마와 초기 메뉴 데이터를 재현 가능하게 관리 |
 | 테스트 | JUnit 5, Testcontainers MySQL | 실제 DB의 락·제약·트랜잭션 동작 검증 |
 | API 문서 | springdoc-openapi | 구현과 API 문서의 차이 축소 |
+| 다중 인스턴스 | Docker Compose, nginx | 동일 앱 2개로 요청을 분산하고 공유 MySQL 상태를 실제 검증 |
 
 ## 검증 기준
 
@@ -152,5 +173,5 @@ erDiagram
 - [x] 포인트 충전과 동시성 검증
 - [x] 주문·결제와 외부 전송 검증
 - [x] 인기 메뉴 조회
-- [ ] 다중 인스턴스 검증
-- [ ] README와 구현 최종 동기화
+- [x] 다중 인스턴스 검증
+- [x] README와 구현 최종 동기화
