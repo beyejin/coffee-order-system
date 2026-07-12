@@ -13,6 +13,7 @@
 | 4 | 인기 메뉴 조회 | ✅ | `feature/popular-menu` | `docs/logs/popular-menu.md` |
 | 5 | 통합 동시성 검증 | 🔲 | `feature/concurrency-test` | `docs/logs/concurrency-test.md` |
 | 6 | 다중 인스턴스 검증 | ✅ | `feature/multi-instance` | `docs/logs/multi-instance.md` |
+| 7 | 패키지 구조 정리 | ✅ | `refactor/1-package-structure` | `docs/logs/package-structure.md` |
 
 상태는 `🔲 미착수 → 🔨 진행 중 → ✅ 검증 완료` 순서로 변경합니다.
 

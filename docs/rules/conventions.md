@@ -6,6 +6,13 @@
 - 모든 문서는 한국어로 작성한다. 코드 식별자·기술 용어는 영어를 유지해도 된다.
 - `docs/strategy.md` 5장의 전략 상태는 선택·학습 단계·미확정을 구분한다. 결정이 바뀌면 관련 문서와 함께 갱신한다.
 
+## 패키지 구조
+
+- `domain/{도메인}` 아래에 `controller`, `dto`, `entity`, `repository`, `service`를 둔다.
+- 전역 설정·예외·공통 응답은 각각 `global/config`, `global/error`, `global/response`에 둔다.
+- 외부 시스템 구현은 `infra/{외부시스템}`에 두고, 도메인 패키지에 인프라 구현을 섞지 않는다.
+- 패키지 이동만을 위한 리팩터링에서는 API 계약, DB 스키마, 비즈니스 로직을 변경하지 않는다.
+
 ## 커밋 메시지
 
 Conventional Commits 형식(`type: 설명`)을 한국어로 작성한다.
