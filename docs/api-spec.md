@@ -48,7 +48,8 @@
   "data": [
     { "menuId": 1, "name": "아메리카노", "price": 4500 },
     { "menuId": 2, "name": "카페라떼", "price": 5000 }
-  ]
+  ],
+  "error": null
 }
 ```
 
