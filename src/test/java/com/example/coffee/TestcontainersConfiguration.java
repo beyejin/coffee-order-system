@@ -11,7 +11,8 @@ public class TestcontainersConfiguration {
 	@Bean
 	@ServiceConnection
 	MySQLContainer mysqlContainer() {
-		return new MySQLContainer("mysql:8.0");
+		return new MySQLContainer("mysql:8.0")
+				.withEnv("TZ", "UTC");
 	}
 
 }

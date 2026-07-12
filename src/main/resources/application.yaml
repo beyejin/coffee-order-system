@@ -2,9 +2,11 @@ spring:
   application:
     name: coffee
   datasource:
-    url: ${DB_URL:jdbc:mysql://localhost:3306/coffee}
+    url: ${DB_URL:jdbc:mysql://localhost:3306/coffee?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:12345678}
+    hikari:
+      connection-init-sql: SET time_zone = '+00:00'
   jpa:
     hibernate:
       ddl-auto: validate

@@ -4,6 +4,8 @@ services:
     environment:
       MYSQL_DATABASE: coffee
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-12345678}
+      TZ: UTC
+    command: ["--default-time-zone=+00:00"]
     ports:
       - "${DB_PORT:-3306}:3306"
     healthcheck:

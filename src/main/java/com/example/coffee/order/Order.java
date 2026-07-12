@@ -32,20 +32,21 @@ public class Order {
 
 	private Long price;
 
-	@Column(name = "created_at", insertable = false, updatable = false)
+	@Column(name = "created_at", nullable = false, updatable = false)
 	private LocalDateTime createdAt;
 
 	protected Order() {
 	}
 
-	private Order(User user, Menu menu, Long price) {
+	private Order(User user, Menu menu, Long price, LocalDateTime createdAt) {
 		this.user = user;
 		this.menu = menu;
 		this.price = price;
+		this.createdAt = createdAt;
 	}
 
-	public static Order create(User user, Menu menu, Long price) {
-		return new Order(user, menu, price);
+	public static Order create(User user, Menu menu, Long price, LocalDateTime createdAt) {
+		return new Order(user, menu, price, createdAt);
 	}
 
 	public Long getId() {
