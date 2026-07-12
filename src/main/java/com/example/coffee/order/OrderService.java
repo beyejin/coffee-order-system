@@ -1,5 +1,10 @@
 package com.example.coffee.order;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
+
 import com.example.coffee.common.BusinessException;
 import com.example.coffee.common.ErrorCode;
 import com.example.coffee.menu.Menu;
@@ -20,19 +25,22 @@ public class OrderService {
 	private final PointHistoryRepository pointHistoryRepository;
 	private final OrderRepository orderRepository;
 	private final ApplicationEventPublisher eventPublisher;
+	private final Clock clock;
 
 	public OrderService(
 			MenuRepository menuRepository,
 			UserRepository userRepository,
 			PointHistoryRepository pointHistoryRepository,
 			OrderRepository orderRepository,
-			ApplicationEventPublisher eventPublisher
+			ApplicationEventPublisher eventPublisher,
+			Clock clock
 	) {
 		this.menuRepository = menuRepository;
 		this.userRepository = userRepository;
 		this.pointHistoryRepository = pointHistoryRepository;
 		this.orderRepository = orderRepository;
 		this.eventPublisher = eventPublisher;
+		this.clock = clock;
 	}
 
 	@Transactional
@@ -53,7 +61,11 @@ public class OrderService {
 
 		user.use(price);
 		pointHistoryRepository.save(PointHistory.use(user, price));
-		Order order = orderRepository.save(Order.create(user, menu, price));
+		LocalDateTime orderedAt = LocalDateTime.ofInstant(
+				clock.instant().truncatedTo(ChronoUnit.MICROS),
+				ZoneOffset.UTC
+		);
+		Order order = orderRepository.save(Order.create(user, menu, price, orderedAt));
 
 		eventPublisher.publishEvent(new OrderPaidEvent(userId, menuId, price));
 
