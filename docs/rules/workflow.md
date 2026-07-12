@@ -7,7 +7,7 @@
 | 순서 | 항목 | 상태 | 브랜치 | 로그 |
 |---|---|---|---|---|
 | 0 | 프로젝트 셋업 | ✅ | `feature/project-setup` | `docs/logs/project-setup.md` |
-| 1 | 메뉴 목록 조회 | 🔲 | `feature/menu-list` | `docs/logs/menu-list.md` |
+| 1 | 메뉴 목록 조회 | ✅ | `feature/menu-list` | `docs/logs/menu-list.md` |
 | 2 | 포인트 충전과 비관적 락 | 🔲 | `feature/point-charge` | `docs/logs/point-charge.md` |
 | 3 | 주문·결제와 외부 전송 실험 | 🔲 | `feature/order` | `docs/logs/order.md` |
 | 4 | 인기 메뉴 조회 | 🔲 | `feature/popular-menu` | `docs/logs/popular-menu.md` |
