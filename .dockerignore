@@ -1,0 +1,7 @@
+.git
+.gradle
+.idea
+build
+docs
+coffee.zip
+*.iml
