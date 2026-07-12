@@ -33,6 +33,7 @@
 | `USER_NOT_FOUND` | 404 | 존재하지 않는 사용자 ID |
 | `INSUFFICIENT_POINT` | 409 | 주문 금액보다 잔액이 부족함 |
 | `INVALID_CHARGE_AMOUNT` | 400 | 충전 금액이 0 이하 |
+| `POINT_BALANCE_OVERFLOW` | 409 | 충전 후 잔액이 BIGINT 범위를 초과함 |
 | `VALIDATION_ERROR` | 400 | 요청 파라미터 형식 오류 |
 
 ---
@@ -68,13 +69,17 @@
 ```json
 {
   "success": true,
-  "data": { "userId": 1, "balance": 10000 }
+  "data": { "userId": 1, "balance": 10000 },
+  "error": null
 }
 ```
 
 **실패 케이스**
 - `amount <= 0` → 400 `INVALID_CHARGE_AMOUNT`
 - 존재하지 않는 `userId` → 404 `USER_NOT_FOUND`
+- 충전 후 잔액이 BIGINT 범위를 초과 → 409 `POINT_BALANCE_OVERFLOW`
+- 잘못된 JSON, 빈 요청 본문, 소수 충전 금액 → 400 `VALIDATION_ERROR`
+- 숫자가 아닌 `userId` → 400 `VALIDATION_ERROR`
 
 ---
 
