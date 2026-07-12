@@ -1,0 +1,18 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: coffee
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-12345678}
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_PASSWORD:-12345678}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - coffee_mysql_data:/var/lib/mysql
+
+volumes:
+  coffee_mysql_data:
