@@ -131,6 +131,12 @@
 
 최근 7일간 주문 횟수 기준 상위 3개 메뉴를 반환합니다.
 
+- 조회 시각 `to`를 UTC 기준으로 한 번 고정하고 DB 정밀도와 같은 microsecond로 절삭합니다.
+- 집계 구간은 `[to - 168시간, to)`입니다. 시작 시각 주문은 포함하고 `to`와 같은 시각의 주문은 제외합니다.
+- 주문 횟수 내림차순, 동률이면 메뉴 ID 오름차순으로 정렬합니다.
+- 응답 이름은 주문 시점 이름이 아니라 현재 `menu.name`입니다.
+- 주문 API도 같은 UTC `Clock`으로 주문 시각을 캡처해 `DATETIME(6)`에 저장합니다.
+
 **Response 200**
 ```json
 {
@@ -139,8 +145,7 @@
     { "menuId": 1, "name": "아메리카노", "orderCount": 42 },
     { "menuId": 3, "name": "카페모카", "orderCount": 30 },
     { "menuId": 2, "name": "카페라떼", "orderCount": 18 }
-  ]
+  ],
+  "error": null
 }
 ```
-
-집계 방식은 `strategy.md` 5.3 및 `policy.md`의 "보류 항목" 참고 (초기 구현은 실시간 `GROUP BY`).
