@@ -2,7 +2,7 @@ spring:
   application:
     name: coffee
   datasource:
-    url: jdbc:mysql://localhost:3306/coffee
+    url: ${DB_URL:jdbc:mysql://localhost:3306/coffee}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:12345678}
   jpa:
