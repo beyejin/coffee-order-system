@@ -29,6 +29,10 @@ public class User {
 		balance = Math.addExact(balance, amount);
 	}
 
+	public void use(long amount) {
+		balance -= amount;
+	}
+
 	public Long getId() {
 		return id;
 	}
