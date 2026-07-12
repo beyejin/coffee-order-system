@@ -1,19 +1,156 @@
 # 커피숍 주문 시스템
 
-다수 서버 환경에서도 안정적으로 동작하는 커피숍 주문 시스템 (K사 서버 개발 사전과제)
+다수 서버·다수 인스턴스 환경에서도 포인트와 주문의 정합성을 지키는 커피 주문 시스템입니다.
+K사 서버 개발 사전과제의 필수 API 4개를 구현하고, 각 설계 선택을 실제 MySQL 테스트로 검증하는 것을 목표로 합니다.
+
+> 현재 상태: 실행 가능한 프로젝트 셋업을 완료했습니다. API 기능은 아직 구현하지 않았으며, 아래 내용은 구현 기준이 되는 설계입니다.
+
+## 실행 방법
+
+필수 환경은 Java 17과 Docker입니다.
+
+```bash
+docker compose up -d mysql
+./gradlew bootRun
+```
+
+실행 후 다음 주소로 프로젝트 기동 상태를 확인합니다.
+
+- Swagger UI: `http://localhost:8080/swagger-ui.html`
+- OpenAPI JSON: `http://localhost:8080/v3/api-docs`
+
+테스트는 MySQL Testcontainers를 사용하므로 Docker가 실행 중이어야 합니다.
+
+```bash
+./gradlew clean test
+```
+
+기본 DB 포트가 사용 중이면 다음처럼 변경할 수 있습니다.
+
+```bash
+DB_PORT=13306 docker compose up -d mysql
+DB_URL=jdbc:mysql://localhost:13306/coffee ./gradlew bootRun
+```
+
+## 요구사항과 범위
+
+| 기능 | API | 핵심 제약 |
+|---|---|---|
+| 메뉴 목록 조회 | `GET /menus` | 메뉴 ID, 이름, 가격 반환 |
+| 포인트 충전 | `POST /users/{userId}/points/charge` | 1원=1P, 잔액과 충전 이력 동시 반영 |
+| 주문·결제 | `POST /orders` | 포인트 차감, 주문 저장, 데이터 플랫폼 전송 |
+| 인기 메뉴 조회 | `GET /menus/popular` | 최근 7일 주문 횟수 상위 3개 |
+
+회원가입·인증, 메뉴 관리, 장바구니, 주문 취소·환불은 요구사항에 없으므로 범위에서 제외합니다. 주문 한 건은 메뉴 한 개만 포함합니다.
+
+## 설계 의도
+
+### 포인트: 현재 잔액과 변경 이력 분리
+
+현재 잔액은 `user.balance`에 저장해 빠르게 조회하고, 충전·사용 내역은 `point_history`에 불변 이력으로 남깁니다. 잔액 변경과 이력 저장은 반드시 같은 트랜잭션에서 처리합니다.
+
+### 주문: 결제 시점 가격 보존
+
+`orders.price`에 주문 시점의 메뉴 가격을 저장합니다. 이후 메뉴 가격이 바뀌어도 과거 결제 금액은 변하지 않습니다. 검증에 실패한 주문은 저장하지 않으므로 `존재하는 주문 = 성공한 주문`이라는 불변식을 유지합니다.
+
+### 동시성: 공유 MySQL의 사용자 행 잠금
+
+동일 사용자의 충전과 주문이 동시에 실행될 때 잔액을 안전하게 변경하기 위해 MySQL 비관적 락을 기본안으로 사용합니다. JVM 로컬 락이나 인스턴스 메모리에 의존하지 않아 여러 애플리케이션 인스턴스에서도 같은 정합성 기준을 적용합니다.
+
+### 인기 메뉴: 주문 원본 실시간 집계
+
+최근 7일 주문 원본을 `GROUP BY`하여 상위 3개를 계산합니다. 초기에는 정확성을 우선하고, 데이터 증가로 조회 비용이 문제가 된다는 근거가 생겼을 때만 캐시나 사전 집계를 검토합니다.
+
+### 외부 전송: 실패를 확인한 뒤 최종 전략 결정
+
+먼저 동기 Mock 전송으로 외부 지연·장애가 결제 트랜잭션에 미치는 영향을 테스트합니다. 이 결과를 근거로 최종 제출 전 `AFTER_COMMIT` 비동기 전송 또는 Outbox 적용 여부를 결정합니다. 아직 최종 선택하지 않은 내용을 구현된 것처럼 문서화하지 않습니다.
+
+## 데이터 모델
+
+```mermaid
+erDiagram
+    USER ||--o{ POINT_HISTORY : has
+    USER ||--o{ ORDERS : places
+    MENU ||--o{ ORDERS : ordered
+
+    USER {
+        BIGINT id PK
+        BIGINT balance
+        DATETIME created_at
+    }
+    POINT_HISTORY {
+        BIGINT id PK
+        BIGINT user_id FK
+        BIGINT amount
+        VARCHAR type
+        DATETIME created_at
+    }
+    MENU {
+        BIGINT id PK
+        VARCHAR name
+        BIGINT price
+    }
+    ORDERS {
+        BIGINT id PK
+        BIGINT user_id FK
+        BIGINT menu_id FK
+        BIGINT price
+        DATETIME created_at
+    }
+```
+
+컬럼과 제약의 상세 내용은 [테이블 명세](docs/table-spec.md)를 참고합니다.
+
+## 문제 해결 전략
+
+1. 가장 단순한 API부터 수직으로 구현해 공통 구조를 검증합니다.
+2. 포인트 충전과 주문에 동시 요청 테스트를 작성해 경쟁 조건을 재현합니다.
+3. 비관적 락 적용 전후의 결과를 동일한 MySQL 테스트로 비교합니다.
+4. 주문·차감·이력 저장 중 하나가 실패할 때 전체가 롤백되는지 검증합니다.
+5. 외부 API 지연·실패를 재현한 뒤 전송 방식의 트레이드오프를 확정합니다.
+6. 인기 메뉴 SQL은 기간 경계와 동률 기준을 테스트하고 `EXPLAIN`으로 실행 계획을 확인합니다.
+
+기능은 `Plan → Generate → Evaluate → Explain` 순서로 진행합니다. 코드가 동작해도 설계 이유와 실패 시 동작을 설명하지 못하면 완료로 처리하지 않습니다.
+
+## 기술 선택
+
+| 항목 | 선택 | 이유 |
+|---|---|---|
+| 언어·프레임워크 | Java 17, Spring Boot | 익숙한 스택으로 트랜잭션과 동시성 학습에 집중 |
+| 데이터베이스 | MySQL | 공유 정본, 트랜잭션과 비관적 락 지원 |
+| 데이터 접근 | Spring Data JPA | 기본 영속성 구현과 선언적 비관적 락 사용 |
+| 마이그레이션 | Flyway | 스키마와 초기 메뉴 데이터를 재현 가능하게 관리 |
+| 테스트 | JUnit 5, Testcontainers MySQL | 실제 DB의 락·제약·트랜잭션 동작 검증 |
+| API 문서 | springdoc-openapi | 구현과 API 문서의 차이 축소 |
+
+## 검증 기준
+
+- 메뉴 조회의 정상 응답과 정렬
+- 정상 충전, 0 이하 충전, 없는 사용자
+- 정상 주문, 포인트 부족, 없는 메뉴·사용자
+- 동일 사용자 동시 충전·주문 후 정확한 잔액과 이력
+- 주문 처리 중 예외 발생 시 주문·잔액·이력 전체 롤백
+- 외부 전송 지연·실패가 결제에 미치는 영향
+- 인기 메뉴의 7일 경계, 주문 횟수, 동률 순서
+- 다중 인스턴스에서 동일한 공유 DB 상태 확인
 
 ## 문서
 
-- [설계 의도 · 문제 해결 전략](docs/strategy.md)
+- [설계 의도·문제 해결 전략](docs/strategy.md)
 - [테이블 명세](docs/table-spec.md)
-- [API 명세서](docs/api-spec.md)
+- [API 명세](docs/api-spec.md)
+- [도메인 정책](docs/rules/policy.md)
+- [개발·검증 흐름](docs/rules/workflow.md)
+- [실행 증거](docs/logs/README.md)
 
 ## 진행 상태
 
-현재 설계 단계입니다. 튜터 설계 점검 이후 구현을 시작합니다.
-
-- [x] 설계 문서화 (전략 / ERD / API 명세)
-- [ ] 튜터 설계 점검
-- [ ] 구현
-- [ ] 동시성 테스트
-- [ ] 최종 정리
+- [x] 요구사항 해석과 설계 초안
+- [x] Spring Boot 프로젝트 스캐폴딩
+- [x] 프로젝트 셋업 최종 검증
+- [ ] 메뉴 목록 조회
+- [ ] 포인트 충전과 동시성 검증
+- [ ] 주문·결제와 외부 전송 검증
+- [ ] 인기 메뉴 조회
+- [ ] 다중 인스턴스 검증
+- [ ] README와 구현 최종 동기화

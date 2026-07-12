@@ -104,7 +104,9 @@
 1. 메뉴 존재 여부 검증 (없으면 404 `MENU_NOT_FOUND`)
 2. 잔액 검증 (부족하면 409 `INSUFFICIENT_POINT`, 이 경우 `orders` row 생성 안 됨)
 3. 하나의 트랜잭션에서: `orders` INSERT + `User.balance` 차감 + `PointHistory`(USE) INSERT
-4. (커밋 후) 데이터 수집 플랫폼으로 주문 내역 전송 — 연동 방식은 `strategy.md` 5.2 참고
+4. 데이터 수집 플랫폼으로 주문 내역 전송
+   - 학습 단계: 트랜잭션 내 동기 Mock 호출로 장애 영향을 재현
+   - 최종 단계: 실패 테스트 후 `strategy.md` 5.2의 결정 게이트에 따라 확정
 
 **실패 케이스**
 - 존재하지 않는 `menuId` → 404 `MENU_NOT_FOUND`
