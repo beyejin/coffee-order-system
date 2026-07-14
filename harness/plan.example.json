@@ -1,0 +1,22 @@
+{
+  "issue": 123,
+  "targetBranch": "main",
+  "objective": "충전과 주문의 통합 동시성 검증",
+  "allowedPaths": [
+    "src/test/java/com/example/coffee/concurrency/CrossDomainConcurrencyIntegrationTest.java",
+    "docs/logs/concurrency-test.md"
+  ],
+  "acceptanceCriteria": [
+    "최종 잔액과 성공 충전 합계와 성공 주문 금액 합계가 일치한다.",
+    "성공 주문 수와 USE 이력 수가 일치한다."
+  ],
+  "declaredRisks": [
+    "transaction",
+    "concurrency"
+  ],
+  "contractChanges": [],
+  "nonGoals": [
+    "운영 코드 변경",
+    "락 전략 변경"
+  ]
+}
