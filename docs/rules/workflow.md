@@ -1,6 +1,6 @@
 # 개발·검증 흐름
 
-기능은 `Plan → Issue → Branch → Generate → Evaluate → Explain` 순서로 진행합니다. 상태 관리는 이 문서에서, 실제 시도와 증거는 `docs/logs/{기능}.md`에서 관리합니다.
+기능은 `Plan → Issue → Branch → Manifest → Prepare → Generate → Evaluate → Explain` 순서로 진행합니다. 상태 관리는 이 문서에서, machine-readable 범위는 `harness/plans/{issue}.json`에서, 실제 시도와 증거는 `docs/logs/{기능}.md`에서 관리합니다.
 
 ## 작업 순서
 
@@ -19,22 +19,31 @@
 ## Plan
 
 - 관련 설계·API·테이블·정책 문서를 읽습니다.
-- 사용자가 핵심 불변식, 트랜잭션 경계, 해피패스와 예외를 설명합니다.
-- AI는 구현보다 먼저 동시성·실패·경계값 반례를 제시합니다.
-- 확정한 범위를 기능 로그의 `Plan`에 짧게 기록합니다.
-- 문서에 없는 판단이나 미확정 전략이 필요하면 여기서 멈추고 질문합니다.
+- 목적, 핵심 불변식, 트랜잭션 경계, 해피패스·예외와 완료 조건을 확정합니다.
+- AI는 구현보다 먼저 동시성·실패·경계값 반례를 제시하고, 미확정 판단이 있으면 질문합니다.
 
 ## Issue
 
-- 확정한 Plan, 작업 범위, 완료 조건, 검증 방법을 GitHub 이슈에 기록합니다.
-- 모든 코드 변경은 연결된 GitHub 이슈가 있어야 하며, 이슈 생성 전에는 구현을 시작하지 않습니다.
-- 구현 중 범위가 달라지면 이슈를 먼저 갱신합니다.
+- 확정한 Plan, 작업 범위, 완료 조건과 검증 방법을 GitHub 이슈에 기록해 issue 번호를 얻습니다.
+- 이슈 생성 전에는 구현을 시작하지 않으며, 범위가 달라지면 이슈와 Plan을 먼저 검토합니다.
 
 ## Branch
 
-- 최신 `main`에서 이슈 전용 브랜치를 생성하고 체크아웃합니다.
-- 브랜치 이름은 `feature/{이슈번호}-{기능}` 형식을 사용합니다. 버그 수정은 `fix/{이슈번호}-{기능}`을 사용합니다.
+- 최신 `origin/main`에서 issue 전용 clean worktree와 branch를 만듭니다.
+- branch 이름은 `(feature|fix|refactor|docs)/{이슈번호}-{lowercase-kebab}` 형식이며 이후 manifest의 issue 번호와 같아야 합니다.
 - 하나의 브랜치는 하나의 이슈만 처리합니다.
+
+## Manifest
+
+- 제품 파일보다 먼저 `harness/plans/{issue}.json`을 작성합니다.
+- objective, allowedPaths, acceptanceCriteria, declaredRisks, contractChanges, nonGoals를 기록합니다.
+- 범위나 위험이 바뀌면 manifest를 자동 확대하지 않고 REPLAN_REQUIRED로 돌아갑니다.
+
+## Prepare
+
+- 최신 `origin/main`의 clean worktree에서 `python3 scripts/agent-harness.py prepare harness/plans/{issue}.json`을 실행합니다.
+- 선택한 plan 외 dirty 경로, branch·issue 불일치, base 확인 실패, Python·Java 17·Docker 환경 부재를 PASS로 처리하지 않습니다.
+- prepare가 `PASS=0`일 때만 allowedPaths 안의 파일을 변경합니다.
 
 ## Generate
 
@@ -45,6 +54,10 @@
 
 ## Evaluate
 
+- 완료 선언 전 `python3 scripts/agent-harness.py evaluate harness/plans/{issue}.json`을 실행합니다.
+- 상태는 `PASS=0`, `FAIL=1`, `BLOCKED=2`, `REPLAN_REQUIRED=3`입니다.
+- FAIL은 최소 수정 뒤 다시 검증하고, BLOCKED는 환경이나 oracle을 준비하며, REPLAN_REQUIRED는 manifest와 사람의 범위 검토로 돌아갑니다.
+- 현재 base tip·merge-base·HEAD·plan·diff에 연결된 PASS evidence만 완료 근거입니다.
 - DB·락·트랜잭션 검증은 H2가 아니라 MySQL Testcontainers로 실행합니다.
 - 성공을 추측하지 않고 실제 명령 결과를 확인합니다.
 - 실패와 성공을 모두 기능 로그의 `Attempt`에 추가합니다.
@@ -61,7 +74,7 @@
 5. 다른 후보 대신 이 전략을 선택한 근거는 무엇인가?
 6. 테스트·SQL·실행 결과로 어떻게 증명했는가?
 
-검증이 끝나면 기능 브랜치를 `main`에 `--no-ff`로 병합하고 상태를 ✅로 갱신합니다. 커밋·병합은 사용자가 요청한 범위에서만 수행합니다.
+검증이 끝난 변경은 pull request로만 `main`에 병합합니다. Phase 1A와 Phase 1B bootstrap은 repository owner가 수동 검토하고, Phase 1B canary 뒤에는 required checks를 모두 통과해야 합니다. 커밋·병합은 사용자가 요청한 범위에서만 수행합니다.
 
 ## 기능 로그
 
