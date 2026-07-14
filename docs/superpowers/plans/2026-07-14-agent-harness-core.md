@@ -2650,9 +2650,9 @@ Expected: evaluate exit 3과 `REPLAN_REQUIRED`. 원래 worktree는 clean 상태�
 ```bash
 PYTHONPATH=harness/tests PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v \
   test_agent_harness.StateAndPlanTest.test_broad_src_glob_requires_replan \
-  test_agent_harness.GitStateTest.test_prepare_rejects_second_dirty_path \
-  test_agent_harness.GitStateTest.test_lock_base_tip_change_requires_replan_when_merge_base_is_unchanged \
-  test_agent_harness.ScopeRiskTest.test_unmatched_path_requires_replan
+  test_agent_harness.GitStateTest.test_prepare_rejects_dirty_path_other_than_selected_plan \
+  test_agent_harness.GitStateTest.test_plan_lock_detects_base_tip_drift_even_when_merge_base_is_same \
+  test_agent_harness.ScopeRiskTest.test_unclassified_path_requires_replan_before_declaration_check
 ```
 
 Expected: 4 tests, all PASS.
