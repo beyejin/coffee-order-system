@@ -6,6 +6,7 @@ import inspect
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -2013,9 +2014,21 @@ class DocumentationTest(unittest.TestCase):
             "python3 scripts/agent-harness.py evaluate harness/plans/<issue>.json",
         ):
             self.assertIn(command, readme)
-        for state in ("PASS", "FAIL", "BLOCKED", "REPLAN_REQUIRED"):
-            self.assertIn(state, readme)
-        self.assertIn("harness/README.md", agents)
+        self.assertEqual(
+            ["prepare", "evaluate"],
+            re.findall(
+                r"python3 scripts/agent-harness\.py (\S+)",
+                readme,
+            ),
+        )
+        for state in HARNESS.State:
+            self.assertIn(f"| {state.name} | {state.value} |", readme)
+        self.assertIn(
+            "| 에이전트 작업 범위·검증 게이트 확인 | "
+            "[`harness/README.md`][harness-readme] |",
+            agents,
+        )
+        self.assertIn("[harness-readme]: harness/README.md", agents)
         self.assertNotIn("integrity --ci", readme)
         self.assertNotIn("evaluate --ci", readme)
 
@@ -2025,9 +2038,13 @@ class DocumentationTest(unittest.TestCase):
         workflow = (root / "docs/rules/workflow.md").read_text(encoding="utf-8")
         conventions = (root / "docs/rules/conventions.md").read_text(encoding="utf-8")
         order = "Plan → Issue → Branch → Manifest → Prepare → Generate → Evaluate → Explain"
+        branch_format = (
+            "(feature|fix|refactor|docs)/{이슈번호}-{lowercase-kebab}"
+        )
         self.assertIn(order, agents)
         self.assertIn(order, workflow)
-        self.assertIn("feature|fix|refactor|docs", workflow)
+        self.assertIn(branch_format, workflow)
+        self.assertIn(branch_format, conventions)
         self.assertIn("PASS=0", workflow)
         self.assertIn("기존 Flyway migration은 수정하거나 삭제하지 않는다", conventions)
         self.assertIn("allowedPaths", conventions)

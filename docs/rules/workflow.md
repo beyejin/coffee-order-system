@@ -30,7 +30,7 @@
 ## Branch
 
 - 최신 `origin/main`에서 issue 전용 clean worktree와 branch를 만듭니다.
-- branch 이름은 `feature|fix|refactor|docs/{이슈번호}-{slug}` 형식이며 이후 manifest의 issue 번호와 같아야 합니다.
+- branch 이름은 `(feature|fix|refactor|docs)/{이슈번호}-{lowercase-kebab}` 형식이며 이후 manifest의 issue 번호와 같아야 합니다.
 - 하나의 브랜치는 하나의 이슈만 처리합니다.
 
 ## Manifest
