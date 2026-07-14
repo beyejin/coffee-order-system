@@ -1871,7 +1871,7 @@ class EvaluationTest(unittest.TestCase):
         )
         docker_blocked = HARNESS.execute_command(
             REPO_ROOT,
-            "command.docker",
+            "gradle.test",
             (
                 sys.executable,
                 "-c",
@@ -1898,6 +1898,21 @@ class EvaluationTest(unittest.TestCase):
             ("definitely-not-an-agent-harness-command",),
             missing.command,
         )
+
+    def test_harness_unit_nonzero_with_docker_message_is_fail(self) -> None:
+        result = HARNESS.execute_command(
+            REPO_ROOT,
+            "harness.unit",
+            (
+                sys.executable,
+                "-c",
+                "import sys; sys.stderr.write('Could not find a valid Docker environment'); sys.exit(1)",
+            ),
+        )
+
+        self.assertEqual(HARNESS.State.FAIL, result.state)
+        self.assertEqual(1, result.exit_code)
+        self.assertIn("Could not find a valid Docker environment", result.reason)
 
 
 if __name__ == "__main__":

@@ -1621,7 +1621,10 @@ def execute_command(
     output = _last_output(result.stdout, result.stderr)
     if result.returncode == 0:
         state = State.PASS
-    elif "Could not find a valid Docker environment" in output:
+    elif (
+        check_id == "gradle.test"
+        and "Could not find a valid Docker environment" in output
+    ):
         state = State.BLOCKED
     else:
         state = State.FAIL
