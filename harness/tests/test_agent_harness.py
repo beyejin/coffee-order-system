@@ -5,11 +5,13 @@ import importlib.util
 import inspect
 import io
 import json
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 
@@ -96,6 +98,16 @@ def passing_preflight(root: Path) -> tuple[object, ...]:
     return fixture_preflight(root, HARNESS.State.PASS)
 
 
+def passing_required_checks(
+    _root: Path,
+    check_ids: tuple[str, ...],
+) -> tuple[object, ...]:
+    return tuple(
+        HARNESS.CheckResult(check_id, HARNESS.State.PASS, "fixture pass")
+        for check_id in check_ids
+    )
+
+
 def make_plan(
     allowed_paths: tuple[str, ...] = ("AGENTS.md",),
     declared_risks: tuple[str, ...] = ("completion",),
@@ -178,6 +190,7 @@ class GitFixture:
             / "V1__fixture.sql"
         ).write_text("create table fixture(id bigint);\n", encoding="utf-8")
         (self.work / "AGENTS.md").write_text("# fixture\n", encoding="utf-8")
+        (self.work / ".gitignore").write_text("build/\n", encoding="utf-8")
         (self.work / "tracked.txt").write_text("base\n", encoding="utf-8")
         (self.work / "rename-old.txt").write_text("rename\n", encoding="utf-8")
 
@@ -1320,6 +1333,571 @@ class GitStateTest(unittest.TestCase):
         self.assertEqual(HARNESS.State.REPLAN_REQUIRED, raised.exception.state)
         self.assertEqual("plan.lock", raised.exception.check_id)
         self.assertIn("base tip", raised.exception.reason)
+
+
+class EvaluationTest(unittest.TestCase):
+    def test_aggregate_state_uses_fail_closed_priority(self) -> None:
+        cases = (
+            ((), HARNESS.State.PASS),
+            ((HARNESS.State.PASS,), HARNESS.State.PASS),
+            ((HARNESS.State.PASS, HARNESS.State.BLOCKED), HARNESS.State.BLOCKED),
+            ((HARNESS.State.BLOCKED, HARNESS.State.FAIL), HARNESS.State.FAIL),
+            (
+                (
+                    HARNESS.State.FAIL,
+                    HARNESS.State.REPLAN_REQUIRED,
+                    HARNESS.State.BLOCKED,
+                ),
+                HARNESS.State.REPLAN_REQUIRED,
+            ),
+        )
+
+        for states, expected in cases:
+            with self.subTest(states=states):
+                checks = tuple(
+                    HARNESS.CheckResult(f"check.{index}", state, "fixture")
+                    for index, state in enumerate(states)
+                )
+                self.assertEqual(expected, HARNESS.aggregate_state(checks))
+
+    def test_cli_argument_errors_are_fail_with_single_line_diagnostic(self) -> None:
+        cases = (
+            (),
+            ("prepare",),
+            ("evaluate",),
+            ("prepare", "plan.json", "extra"),
+            ("unknown",),
+        )
+
+        for argv in cases:
+            with self.subTest(argv=argv):
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    exit_code = HARNESS.main(argv)
+
+                self.assertEqual(1, exit_code)
+                self.assertEqual(1, len(stderr.getvalue().splitlines()))
+                self.assertIn("[FAIL] cli.arguments", stderr.getvalue())
+
+    def test_diff_hash_changes_when_untracked_content_changes(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        context = fixture.context()
+        untracked = fixture.work / "untracked.txt"
+        untracked.write_text("one\n", encoding="utf-8")
+        changed_paths = HARNESS.collect_local_changed_paths(
+            fixture.work,
+            context.merge_base_sha,
+        )
+
+        first = HARNESS.compute_diff_hash(fixture.work, context, changed_paths)
+        untracked.write_text("two\n", encoding="utf-8")
+        second = HARNESS.compute_diff_hash(fixture.work, context, changed_paths)
+
+        self.assertRegex(first, r"^[0-9a-f]{64}$")
+        self.assertNotEqual(first, second)
+
+    def test_evaluate_scope_violation_writes_replan_evidence(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        fixture.prepare_and_add_outside_path()
+        runner_called = False
+
+        def should_not_run(_root: Path, _check_ids: tuple[str, ...]) -> tuple[object, ...]:
+            nonlocal runner_called
+            runner_called = True
+            return ()
+
+        evaluation = HARNESS.evaluate(
+            fixture.work,
+            fixture.plan(),
+            check_runner=should_not_run,
+        )
+        evidence_path = fixture.work / "build" / "harness" / "evaluation.json"
+        payload = json.loads(evidence_path.read_text(encoding="utf-8"))
+
+        self.assertFalse(runner_called)
+        self.assertEqual(HARNESS.State.REPLAN_REQUIRED, evaluation.state)
+        self.assertEqual("REPLAN_REQUIRED", payload["state"])
+        self.assertIn("outside.md", payload["changedPaths"])
+        self.assertRegex(payload["diffHash"], r"^[0-9a-f]{64}$")
+
+    def test_passing_evaluation_serializes_complete_identity(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        fixture.prepare_scope_only_change()
+
+        evaluation = HARNESS.evaluate(
+            fixture.work,
+            fixture.plan(),
+            check_runner=passing_required_checks,
+        )
+        payload = evaluation.to_dict()
+
+        self.assertEqual(HARNESS.State.PASS, evaluation.state)
+        self.assertEqual(
+            {
+                "schemaVersion",
+                "state",
+                "baseTipSha",
+                "mergeBaseSha",
+                "candidateHeadSha",
+                "testedRevisionSha",
+                "planPath",
+                "planHash",
+                "declaredRisks",
+                "detectedRisks",
+                "changedPaths",
+                "diffHash",
+                "checks",
+            },
+            set(payload),
+        )
+        self.assertRegex(payload["baseTipSha"], r"^[0-9a-f]{40}$")
+        self.assertRegex(payload["mergeBaseSha"], r"^[0-9a-f]{40}$")
+        self.assertRegex(payload["candidateHeadSha"], r"^[0-9a-f]{40}$")
+        self.assertEqual(payload["candidateHeadSha"], payload["testedRevisionSha"])
+        self.assertEqual(fixture.plan().as_posix(), payload["planPath"])
+        self.assertRegex(payload["planHash"], r"^[0-9a-f]{64}$")
+        self.assertEqual(["completion"], payload["declaredRisks"])
+        self.assertEqual(["completion"], payload["detectedRisks"])
+        self.assertEqual(["AGENTS.md"], payload["changedPaths"])
+        self.assertRegex(payload["diffHash"], r"^[0-9a-f]{64}$")
+        self.assertTrue(payload["checks"])
+        self.assertEqual(
+            {
+                "id",
+                "state",
+                "reason",
+                "command",
+                "exitCode",
+                "durationMs",
+            },
+            set(payload["checks"][0]),
+        )
+
+    def test_runner_committing_same_diff_requires_replan(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        fixture.prepare_scope_only_change()
+
+        def committing_runner(
+            root: Path,
+            check_ids: tuple[str, ...],
+        ) -> tuple[object, ...]:
+            git(root, "add", "AGENTS.md")
+            git(root, "commit", "-m", "runner changed HEAD")
+            return passing_required_checks(root, check_ids)
+
+        evaluation = HARNESS.evaluate(
+            fixture.work,
+            fixture.plan(),
+            check_runner=committing_runner,
+        )
+
+        self.assertEqual(HARNESS.State.REPLAN_REQUIRED, evaluation.state)
+        freshness = [
+            check for check in evaluation.checks if check.check_id == "evidence.freshness"
+        ]
+        self.assertEqual(1, len(freshness))
+        self.assertEqual(HARNESS.State.REPLAN_REQUIRED, freshness[0].state)
+        self.assertIn("HEAD", freshness[0].reason)
+
+    def test_check_runner_results_are_validated_fail_closed(self) -> None:
+        cases = ("empty", "missing", "duplicate", "extra", "non-check-result")
+
+        for malformed in cases:
+            with self.subTest(malformed=malformed):
+                fixture = GitFixture()
+                self.addCleanup(fixture.close)
+                fixture.prepare_scope_only_change()
+
+                def malformed_runner(
+                    _root: Path,
+                    check_ids: tuple[str, ...],
+                ) -> tuple[object, ...]:
+                    valid = tuple(
+                        HARNESS.CheckResult(
+                            check_id,
+                            HARNESS.State.PASS,
+                            "fixture pass",
+                        )
+                        for check_id in check_ids
+                    )
+                    if malformed == "empty":
+                        return ()
+                    if malformed == "missing":
+                        return valid[:-1]
+                    if malformed == "duplicate":
+                        return (*valid, valid[0])
+                    if malformed == "extra":
+                        return (
+                            *valid,
+                            HARNESS.CheckResult(
+                                "unknown.extra",
+                                HARNESS.State.PASS,
+                                "forged",
+                            ),
+                        )
+                    return (*valid, "not a CheckResult")
+
+                evaluation = HARNESS.evaluate(
+                    fixture.work,
+                    fixture.plan(),
+                    check_runner=malformed_runner,
+                )
+                evidence = json.loads(
+                    (
+                        fixture.work / "build" / "harness" / "evaluation.json"
+                    ).read_text(encoding="utf-8")
+                )
+
+                self.assertNotEqual(HARNESS.State.PASS, evaluation.state)
+                self.assertTrue(
+                    any(
+                        check.check_id == "checks.runner"
+                        and check.state is HARNESS.State.FAIL
+                        for check in evaluation.checks
+                    ),
+                    evaluation.checks,
+                )
+                self.assertTrue(
+                    any(check["id"] == "checks.runner" for check in evidence["checks"])
+                )
+
+    def test_runner_exception_after_commit_still_records_replan_freshness(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        fixture.prepare_scope_only_change()
+
+        def committing_then_failing(
+            root: Path,
+            _check_ids: tuple[str, ...],
+        ) -> tuple[object, ...]:
+            git(root, "add", "AGENTS.md")
+            git(root, "commit", "-m", "runner changed HEAD before failure")
+            raise RuntimeError("runner exploded")
+
+        evaluation = HARNESS.evaluate(
+            fixture.work,
+            fixture.plan(),
+            check_runner=committing_then_failing,
+        )
+
+        self.assertEqual(HARNESS.State.REPLAN_REQUIRED, evaluation.state)
+        self.assertTrue(
+            any(
+                check.check_id == "harness.internal"
+                and check.state is HARNESS.State.FAIL
+                for check in evaluation.checks
+            )
+        )
+        self.assertTrue(
+            any(
+                check.check_id == "evidence.freshness"
+                and check.state is HARNESS.State.REPLAN_REQUIRED
+                for check in evaluation.checks
+            )
+        )
+
+    def test_write_json_atomic_escapes_invalid_utf8_surrogate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "evidence.json"
+
+            HARNESS.write_json_atomic(path, {"changedPaths": ["bad\udcff"]})
+            raw = path.read_bytes()
+            payload = json.loads(raw.decode("utf-8"))
+
+        self.assertEqual("bad\udcff", payload["changedPaths"][0])
+        self.assertIn(b"\\udcff", raw)
+
+    def test_evaluate_rejects_preexisting_symlinked_evidence_parent(self) -> None:
+        for parent_component in ("build", "harness"):
+            with self.subTest(parent_component=parent_component):
+                fixture = GitFixture()
+                self.addCleanup(fixture.close)
+                fixture.prepare_scope_only_change()
+                outside = fixture.base / f"outside-{parent_component}"
+                sentinel_bytes = b"external sentinel\n"
+
+                if parent_component == "build":
+                    shutil.rmtree(fixture.work / "build")
+                    sentinel = outside / "harness" / "evaluation.json"
+                    sentinel.parent.mkdir(parents=True)
+                    (fixture.work / "build").symlink_to(
+                        outside,
+                        target_is_directory=True,
+                    )
+                else:
+                    shutil.rmtree(fixture.work / "build" / "harness")
+                    sentinel = outside / "evaluation.json"
+                    outside.mkdir()
+                    (fixture.work / "build" / "harness").symlink_to(
+                        outside,
+                        target_is_directory=True,
+                    )
+                sentinel.write_bytes(sentinel_bytes)
+
+                evaluation = HARNESS.evaluate(
+                    fixture.work,
+                    fixture.plan(),
+                    check_runner=passing_required_checks,
+                )
+
+                self.assertEqual(HARNESS.State.FAIL, evaluation.state)
+                self.assertEqual("evidence.path", evaluation.checks[0].check_id)
+                self.assertEqual(sentinel_bytes, sentinel.read_bytes())
+
+    def test_evaluate_rechecks_evidence_parent_after_runner(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        fixture.prepare_scope_only_change()
+        outside = fixture.base / "outside-swap"
+        outside.mkdir()
+        sentinel = outside / "evaluation.json"
+        sentinel_bytes = b"external sentinel\n"
+        sentinel.write_bytes(sentinel_bytes)
+
+        def swapping_runner(
+            root: Path,
+            check_ids: tuple[str, ...],
+        ) -> tuple[object, ...]:
+            shutil.rmtree(root / "build" / "harness")
+            (root / "build" / "harness").symlink_to(
+                outside,
+                target_is_directory=True,
+            )
+            return passing_required_checks(root, check_ids)
+
+        evaluation = HARNESS.evaluate(
+            fixture.work,
+            fixture.plan(),
+            check_runner=swapping_runner,
+        )
+
+        self.assertEqual(HARNESS.State.FAIL, evaluation.state)
+        self.assertTrue(
+            any(check.check_id == "evidence.path" for check in evaluation.checks)
+        )
+        self.assertEqual(sentinel_bytes, sentinel.read_bytes())
+
+    def test_evaluate_restores_validated_plan_lock_removed_by_clean_check(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        fixture.prepare_scope_only_change()
+        lock_path = fixture.work / "build" / "harness" / "plan.lock.json"
+        expected_lock = json.loads(lock_path.read_text(encoding="utf-8"))
+
+        def clean_build_runner(
+            root: Path,
+            check_ids: tuple[str, ...],
+        ) -> tuple[object, ...]:
+            shutil.rmtree(root / "build")
+            return passing_required_checks(root, check_ids)
+
+        first = HARNESS.evaluate(
+            fixture.work,
+            fixture.plan(),
+            check_runner=clean_build_runner,
+        )
+
+        self.assertEqual(HARNESS.State.PASS, first.state)
+        self.assertTrue(lock_path.is_file())
+        self.assertEqual(
+            expected_lock,
+            json.loads(lock_path.read_text(encoding="utf-8")),
+        )
+
+        second = HARNESS.evaluate(
+            fixture.work,
+            fixture.plan(),
+            check_runner=passing_required_checks,
+        )
+        self.assertEqual(HARNESS.State.PASS, second.state)
+
+    def test_evaluate_does_not_restore_stale_lock_after_plan_drift(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        fixture.prepare_scope_only_change()
+        lock_path = fixture.work / "build" / "harness" / "plan.lock.json"
+
+        def cleaning_and_drifting_runner(
+            root: Path,
+            check_ids: tuple[str, ...],
+        ) -> tuple[object, ...]:
+            shutil.rmtree(root / "build")
+            selected_plan = root / fixture.plan()
+            selected_plan.write_bytes(selected_plan.read_bytes() + b"\n")
+            return passing_required_checks(root, check_ids)
+
+        evaluation = HARNESS.evaluate(
+            fixture.work,
+            fixture.plan(),
+            check_runner=cleaning_and_drifting_runner,
+        )
+        evidence_path = fixture.work / "build" / "harness" / "evaluation.json"
+
+        self.assertEqual(HARNESS.State.REPLAN_REQUIRED, evaluation.state)
+        self.assertFalse(lock_path.exists())
+        self.assertEqual(
+            "REPLAN_REQUIRED",
+            json.loads(evidence_path.read_text(encoding="utf-8"))["state"],
+        )
+
+    def test_evaluate_removes_stale_pass_before_writing_new_result(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        state, _checks = HARNESS.prepare(
+            fixture.work,
+            fixture.plan(),
+            preflight=passing_preflight,
+        )
+        self.assertEqual(HARNESS.State.PASS, state)
+        evidence_path = fixture.work / "build" / "harness" / "evaluation.json"
+        evidence_path.write_text('{"state":"PASS","stale":true}\n', encoding="utf-8")
+        (fixture.work / "outside.md").write_text("outside\n", encoding="utf-8")
+
+        evaluation = HARNESS.evaluate(
+            fixture.work,
+            fixture.plan(),
+            check_runner=passing_required_checks,
+        )
+        payload = json.loads(evidence_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(HARNESS.State.REPLAN_REQUIRED, evaluation.state)
+        self.assertEqual("REPLAN_REQUIRED", payload["state"])
+        self.assertNotIn("stale", payload)
+
+    def test_diff_hash_tracks_tracked_content_and_symlink_target_string(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        context = fixture.context()
+        tracked = fixture.work / "tracked.txt"
+
+        clean_hash = HARNESS.compute_diff_hash(fixture.work, context, ())
+        tracked.write_text("unstaged one\n", encoding="utf-8")
+        changed_paths = HARNESS.collect_local_changed_paths(
+            fixture.work,
+            context.merge_base_sha,
+        )
+        unstaged_hash = HARNESS.compute_diff_hash(
+            fixture.work,
+            context,
+            changed_paths,
+        )
+        git(fixture.work, "add", "tracked.txt")
+        staged_hash = HARNESS.compute_diff_hash(
+            fixture.work,
+            context,
+            changed_paths,
+        )
+        tracked.write_text("unstaged two\n", encoding="utf-8")
+        mixed_hash = HARNESS.compute_diff_hash(
+            fixture.work,
+            context,
+            changed_paths,
+        )
+
+        self.assertNotEqual(clean_hash, unstaged_hash)
+        self.assertEqual(unstaged_hash, staged_hash)
+        self.assertNotEqual(staged_hash, mixed_hash)
+
+        target = fixture.base / "target-a"
+        target.write_text("one\n", encoding="utf-8")
+        link = fixture.work / "untracked-link"
+        link.symlink_to(os.path.relpath(target, fixture.work))
+        link_paths = HARNESS.collect_local_changed_paths(
+            fixture.work,
+            context.merge_base_sha,
+        )
+        link_hash = HARNESS.compute_diff_hash(fixture.work, context, link_paths)
+        target.write_text("two\n", encoding="utf-8")
+        same_target_hash = HARNESS.compute_diff_hash(
+            fixture.work,
+            context,
+            link_paths,
+        )
+        other_target = fixture.base / "target-b"
+        other_target.write_text("two\n", encoding="utf-8")
+        link.unlink()
+        link.symlink_to(os.path.relpath(other_target, fixture.work))
+        other_target_hash = HARNESS.compute_diff_hash(
+            fixture.work,
+            context,
+            link_paths,
+        )
+
+        self.assertEqual(link_hash, same_target_hash)
+        self.assertNotEqual(link_hash, other_target_hash)
+
+    def test_required_check_ids_are_unique_and_unimplemented_oracle_blocks(self) -> None:
+        policy = HARNESS.load_risk_policy(SOURCE_POLICY)
+        plan = make_plan(declared_risks=("scope", "completion", "concurrency"))
+        classification = HARNESS.RiskClassification(
+            detected_risks=("scope", "concurrency"),
+            unclassified_paths=(),
+        )
+
+        check_ids = HARNESS.required_check_ids(plan, classification, policy)
+        oracle_results = HARNESS.run_required_checks(
+            REPO_ROOT,
+            ("oracle.cross-domain-concurrency",),
+        )
+
+        self.assertEqual("harness.unit", check_ids[0])
+        self.assertEqual("gradle.test", check_ids[1])
+        self.assertEqual(len(check_ids), len(set(check_ids)))
+        self.assertIn("oracle.cross-domain-concurrency", check_ids)
+        self.assertNotIn("scope.allowed-paths", check_ids)
+        self.assertNotIn("risk.classification", check_ids)
+        self.assertNotIn("risk.declaration", check_ids)
+        self.assertEqual(1, len(oracle_results))
+        self.assertEqual(HARNESS.State.BLOCKED, oracle_results[0].state)
+
+    def test_execute_command_records_output_status_and_environment(self) -> None:
+        success = HARNESS.execute_command(
+            REPO_ROOT,
+            "command.success",
+            (
+                sys.executable,
+                "-c",
+                "import os; print(os.environ.get('PYTHONDONTWRITEBYTECODE'))",
+            ),
+        )
+        failure = HARNESS.execute_command(
+            REPO_ROOT,
+            "command.failure",
+            (sys.executable, "-c", "import sys; print('nope'); sys.exit(7)"),
+        )
+        docker_blocked = HARNESS.execute_command(
+            REPO_ROOT,
+            "command.docker",
+            (
+                sys.executable,
+                "-c",
+                "import sys; sys.stderr.write('Could not find a valid Docker environment'); sys.exit(1)",
+            ),
+        )
+        missing = HARNESS.execute_command(
+            REPO_ROOT,
+            "command.missing",
+            ("definitely-not-an-agent-harness-command",),
+        )
+
+        self.assertEqual(HARNESS.State.PASS, success.state)
+        self.assertIn("1", success.reason)
+        self.assertEqual(0, success.exit_code)
+        self.assertIsInstance(success.duration_ms, int)
+        self.assertEqual(HARNESS.State.FAIL, failure.state)
+        self.assertEqual(7, failure.exit_code)
+        self.assertIn("nope", failure.reason)
+        self.assertEqual(HARNESS.State.BLOCKED, docker_blocked.state)
+        self.assertEqual(HARNESS.State.FAIL, missing.state)
+        self.assertIsNone(missing.exit_code)
+        self.assertEqual(
+            ("definitely-not-an-agent-harness-command",),
+            missing.command,
+        )
 
 
 if __name__ == "__main__":

@@ -103,6 +103,50 @@ class CheckResult:
     duration_ms: int | None = None
 
 
+@dataclass(frozen=True)
+class Evaluation:
+    schema_version: int
+    state: State
+    base_tip_sha: str | None
+    merge_base_sha: str | None
+    candidate_head_sha: str | None
+    tested_revision_sha: str | None
+    plan_path: str
+    plan_hash: str | None
+    declared_risks: tuple[str, ...]
+    detected_risks: tuple[str, ...]
+    changed_paths: tuple[str, ...]
+    diff_hash: str | None
+    checks: tuple[CheckResult, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "schemaVersion": self.schema_version,
+            "state": self.state.name,
+            "baseTipSha": self.base_tip_sha,
+            "mergeBaseSha": self.merge_base_sha,
+            "candidateHeadSha": self.candidate_head_sha,
+            "testedRevisionSha": self.tested_revision_sha,
+            "planPath": self.plan_path,
+            "planHash": self.plan_hash,
+            "declaredRisks": list(self.declared_risks),
+            "detectedRisks": list(self.detected_risks),
+            "changedPaths": list(self.changed_paths),
+            "diffHash": self.diff_hash,
+            "checks": [
+                {
+                    "id": check.check_id,
+                    "state": check.state.name,
+                    "reason": check.reason,
+                    "command": list(check.command),
+                    "exitCode": check.exit_code,
+                    "durationMs": check.duration_ms,
+                }
+                for check in self.checks
+            ],
+        }
+
+
 PLAN_FIELDS = frozenset(
     {
         "issue",
@@ -164,6 +208,27 @@ REQUIRED_PREFLIGHT_CHECK_IDS = frozenset(
         "environment.java17-toolchain",
     }
 )
+STATE_PRIORITY = {
+    State.PASS: 0,
+    State.BLOCKED: 1,
+    State.FAIL: 2,
+    State.REPLAN_REQUIRED: 3,
+}
+HARNESS_TEST_COMMAND = (
+    sys.executable,
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "harness/tests",
+    "-p",
+    "test_*.py",
+    "-v",
+)
+GRADLE_TEST_COMMAND = ("./gradlew", "clean", "test", "--console", "plain")
+INLINE_CHECK_IDS = frozenset(
+    {"scope.allowed-paths", "risk.classification", "risk.declaration"}
+)
 
 
 class _DuplicateJsonKey(ValueError):
@@ -183,6 +248,14 @@ def _reject_duplicate_json_keys(
 
 def _violation(state: State, check_id: str, reason: str) -> HarnessViolation:
     return HarnessViolation(state, check_id, reason)
+
+
+def aggregate_state(checks: Iterable[CheckResult]) -> State:
+    return max(
+        (check.state for check in checks),
+        key=STATE_PRIORITY.__getitem__,
+        default=State.PASS,
+    )
 
 
 def string_array(
@@ -786,6 +859,63 @@ def collect_local_changed_paths(
     )
 
 
+def compute_diff_hash(
+    root: Path,
+    context: GitContext,
+    changed_paths: Iterable[str],
+) -> str:
+    try:
+        raw_diff = run_git(
+            root,
+            "diff",
+            "--binary",
+            "--no-ext-diff",
+            "--no-textconv",
+            context.merge_base_sha,
+            "--",
+        )
+        untracked_paths = set(
+            parse_nul_paths(
+                run_git(root, "ls-files", "--others", "--exclude-standard", "-z")
+            )
+        )
+    except HarnessViolation:
+        raise
+    except Exception as error:
+        raise _git_diff_error(f"diff hash 입력을 읽을 수 없습니다: {error}") from error
+
+    selected_untracked = sorted(untracked_paths.intersection(set(changed_paths)))
+    digest = hashlib.sha256()
+    digest.update(raw_diff)
+    resolved_root = root.resolve()
+
+    for relative_path in selected_untracked:
+        candidate = resolved_root / relative_path
+        try:
+            status_result = candidate.lstat()
+            if stat.S_ISLNK(status_result.st_mode):
+                content = os.readlink(candidate).encode(
+                    "utf-8",
+                    errors="surrogateescape",
+                )
+            elif stat.S_ISREG(status_result.st_mode):
+                candidate.resolve(strict=True).relative_to(resolved_root)
+                content = candidate.read_bytes()
+            else:
+                raise OSError("regular file 또는 symlink가 아닙니다.")
+        except (OSError, ValueError) as error:
+            raise _git_diff_error(
+                f"untracked diff 내용을 읽을 수 없습니다: {relative_path!r}: {error}"
+            ) from error
+
+        digest.update(relative_path.encode("utf-8", errors="surrogateescape"))
+        digest.update(b"\0")
+        digest.update(content)
+        digest.update(b"\0")
+
+    return digest.hexdigest()
+
+
 def scope_violations(
     changed_paths: Iterable[str],
     plan: Plan,
@@ -1025,7 +1155,7 @@ def _ensure_safe_evidence_directory(root: Path, directory: Path) -> None:
         ) from error
 
 
-def safe_evidence_lock_path(root: Path) -> Path:
+def _safe_evidence_path(root: Path, filename: str) -> Path:
     resolved_root = _strict_repository_root(root)
     build_directory = resolved_root / "build"
     harness_directory = build_directory / "harness"
@@ -1034,50 +1164,87 @@ def safe_evidence_lock_path(root: Path) -> Path:
     _ensure_safe_evidence_directory(resolved_root, harness_directory)
     _ensure_safe_evidence_directory(resolved_root, build_directory)
     _ensure_safe_evidence_directory(resolved_root, harness_directory)
-    return harness_directory / "plan.lock.json"
+    path = harness_directory / filename
+    try:
+        target_status = path.lstat()
+    except FileNotFoundError:
+        return path
+    except OSError as error:
+        raise _evidence_path_error(
+            f"evidence file을 확인할 수 없습니다: {path}: {error}"
+        ) from error
+
+    if stat.S_ISLNK(target_status.st_mode):
+        raise _evidence_path_error(f"evidence file symlink는 허용되지 않습니다: {path}")
+    if not stat.S_ISREG(target_status.st_mode):
+        raise _evidence_path_error(f"evidence file은 regular file이어야 합니다: {path}")
+    return path
+
+
+def safe_evidence_lock_path(root: Path) -> Path:
+    return _safe_evidence_path(root, "plan.lock.json")
+
+
+def safe_evidence_evaluation_path(root: Path) -> Path:
+    return _safe_evidence_path(root, "evaluation.json")
+
+
+def _remove_stale_evidence(path: Path, label: str) -> Path:
+    try:
+        path_status = path.lstat()
+    except FileNotFoundError:
+        return path
+    except OSError as error:
+        raise _evidence_path_error(f"기존 {label}을 확인할 수 없습니다: {error}") from error
+
+    if stat.S_ISLNK(path_status.st_mode) or not stat.S_ISREG(path_status.st_mode):
+        raise _evidence_path_error(f"{label} 경로는 regular file이어야 합니다.")
+    try:
+        path.unlink()
+    except OSError as error:
+        raise _evidence_path_error(f"기존 {label}을 제거할 수 없습니다: {error}") from error
+    return path
 
 
 def remove_stale_plan_lock(root: Path) -> Path:
     lock_path = safe_evidence_lock_path(root)
-    try:
-        lock_status = lock_path.lstat()
-    except FileNotFoundError:
-        return lock_path
-    except OSError as error:
-        raise _evidence_path_error(
-            f"기존 plan lock을 확인할 수 없습니다: {error}"
-        ) from error
+    return _remove_stale_evidence(lock_path, "plan lock")
 
-    if stat.S_ISDIR(lock_status.st_mode):
-        raise _evidence_path_error("plan lock 경로는 directory일 수 없습니다.")
-    try:
-        lock_path.unlink()
-    except OSError as error:
-        raise _evidence_path_error(
-            f"기존 plan lock을 제거할 수 없습니다: {error}"
-        ) from error
-    return lock_path
+
+def remove_stale_evaluation(root: Path) -> Path:
+    evaluation_path = safe_evidence_evaluation_path(root)
+    return _remove_stale_evidence(evaluation_path, "evaluation")
 
 
 def write_json_atomic(path: Path, payload: Mapping[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    rendered = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        indent=2,
+    ) + "\n"
+    try:
+        encoded = rendered.encode("utf-8")
+    except UnicodeEncodeError:
+        encoded = (
+            json.dumps(
+                payload,
+                ensure_ascii=True,
+                sort_keys=True,
+                indent=2,
+            )
+            + "\n"
+        ).encode("utf-8")
+
     temporary_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
+            mode="wb",
             dir=path.parent,
             delete=False,
         ) as handle:
             temporary_path = Path(handle.name)
-            json.dump(
-                payload,
-                handle,
-                ensure_ascii=False,
-                sort_keys=True,
-                indent=2,
-            )
-            handle.write("\n")
+            handle.write(encoded)
             handle.flush()
             os.fsync(handle.fileno())
         temporary_path.replace(path)
@@ -1421,6 +1588,190 @@ def validate_preflight_results(raw_checks: Sequence[CheckResult]) -> tuple[Check
     return checks
 
 
+def execute_command(
+    root: Path,
+    check_id: str,
+    command: Sequence[str],
+) -> CheckResult:
+    normalized_command = tuple(command)
+    environment = os.environ.copy()
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    started = time.monotonic()
+    try:
+        result = subprocess.run(
+            normalized_command,
+            cwd=root,
+            check=False,
+            capture_output=True,
+            env=environment,
+            shell=False,
+        )
+    except OSError as error:
+        duration_ms = int((time.monotonic() - started) * 1000)
+        return CheckResult(
+            check_id,
+            State.FAIL,
+            f"명령을 실행할 수 없습니다: {error}",
+            normalized_command,
+            None,
+            duration_ms,
+        )
+
+    duration_ms = int((time.monotonic() - started) * 1000)
+    output = _last_output(result.stdout, result.stderr)
+    if result.returncode == 0:
+        state = State.PASS
+    elif "Could not find a valid Docker environment" in output:
+        state = State.BLOCKED
+    else:
+        state = State.FAIL
+    return CheckResult(
+        check_id,
+        state,
+        output or "출력 없음",
+        normalized_command,
+        result.returncode,
+        duration_ms,
+    )
+
+
+def required_check_ids(
+    plan: Plan,
+    classification: RiskClassification,
+    policy: RiskPolicy,
+) -> tuple[str, ...]:
+    selected = {"harness.unit", "gradle.test"}
+    for risk in set(plan.declared_risks).union(classification.detected_risks):
+        selected.update(policy.risk_checks[risk])
+    selected.difference_update(INLINE_CHECK_IDS)
+    selected.difference_update({"harness.unit", "gradle.test"})
+    return ("harness.unit", "gradle.test", *sorted(selected))
+
+
+def run_required_checks(
+    root: Path,
+    check_ids: Sequence[str],
+) -> tuple[CheckResult, ...]:
+    checks: list[CheckResult] = []
+    for check_id in check_ids:
+        if check_id == "harness.unit":
+            checks.append(execute_command(root, check_id, HARNESS_TEST_COMMAND))
+        elif check_id == "gradle.test":
+            environment_checks = validate_preflight_results(
+                run_prepare_preflight(root)
+            )
+            checks.extend(environment_checks)
+            if all(check.state is State.PASS for check in environment_checks):
+                checks.append(execute_command(root, check_id, GRADLE_TEST_COMMAND))
+            else:
+                blocked_ids = [
+                    check.check_id
+                    for check in environment_checks
+                    if check.state is not State.PASS
+                ]
+                checks.append(
+                    CheckResult(
+                        check_id,
+                        State.BLOCKED,
+                        f"필수 환경 검사가 통과하지 않았습니다: {blocked_ids}",
+                        GRADLE_TEST_COMMAND,
+                    )
+                )
+        else:
+            checks.append(
+                CheckResult(
+                    check_id,
+                    State.BLOCKED,
+                    "아직 구현되지 않은 필수 oracle입니다.",
+                )
+            )
+    return tuple(checks)
+
+
+def _check_result_schema_error(check: object) -> str | None:
+    if not isinstance(check, CheckResult):
+        return "check runner 결과는 CheckResult여야 합니다."
+    if (
+        not isinstance(check.check_id, str)
+        or not check.check_id
+        or check.check_id != check.check_id.strip()
+        or any(unicodedata.category(character) == "Cc" for character in check.check_id)
+    ):
+        return "check runner check_id가 올바르지 않습니다."
+    if not isinstance(check.state, State):
+        return f"check runner state가 올바르지 않습니다: {check.check_id}"
+    if not isinstance(check.reason, str):
+        return f"check runner reason이 문자열이 아닙니다: {check.check_id}"
+    if not isinstance(check.command, tuple) or any(
+        not isinstance(argument, str) for argument in check.command
+    ):
+        return f"check runner command가 문자열 tuple이 아닙니다: {check.check_id}"
+    if check.exit_code is not None and type(check.exit_code) is not int:
+        return f"check runner exit_code가 올바르지 않습니다: {check.check_id}"
+    if check.duration_ms is not None and (
+        type(check.duration_ms) is not int or check.duration_ms < 0
+    ):
+        return f"check runner duration_ms가 올바르지 않습니다: {check.check_id}"
+    return None
+
+
+def validate_check_runner_results(
+    raw_checks: object,
+    requested_ids: Sequence[str],
+) -> tuple[tuple[CheckResult, ...], CheckResult | None]:
+    try:
+        candidates = tuple(raw_checks)  # type: ignore[arg-type]
+    except (TypeError, ValueError) as error:
+        return (), CheckResult(
+            "checks.runner",
+            State.FAIL,
+            f"check runner 결과를 해석할 수 없습니다: {error}",
+        )
+
+    valid_checks: list[CheckResult] = []
+    for candidate in candidates:
+        schema_error = _check_result_schema_error(candidate)
+        if schema_error is not None:
+            return tuple(valid_checks), CheckResult(
+                "checks.runner",
+                State.FAIL,
+                schema_error,
+            )
+        valid_checks.append(candidate)
+
+    check_ids = [check.check_id for check in valid_checks]
+    duplicate_ids = sorted(
+        {check_id for check_id in check_ids if check_ids.count(check_id) > 1}
+    )
+    if duplicate_ids:
+        return tuple(valid_checks), CheckResult(
+            "checks.runner",
+            State.FAIL,
+            f"check runner check_id가 중복되었습니다: {duplicate_ids}",
+        )
+
+    requested = tuple(requested_ids)
+    missing = sorted(set(requested) - set(check_ids))
+    if missing:
+        return tuple(valid_checks), CheckResult(
+            "checks.runner",
+            State.FAIL,
+            f"필수 check 결과가 누락되었습니다: {missing}",
+        )
+
+    allowed_extras = (
+        REQUIRED_PREFLIGHT_CHECK_IDS if "gradle.test" in requested else frozenset()
+    )
+    unknown_extras = sorted(set(check_ids) - set(requested) - set(allowed_extras))
+    if unknown_extras:
+        return tuple(valid_checks), CheckResult(
+            "checks.runner",
+            State.FAIL,
+            f"허용되지 않은 추가 check 결과가 있습니다: {unknown_extras}",
+        )
+    return tuple(valid_checks), None
+
+
 def validate_prepare_clean_state(root: Path, plan: Plan) -> None:
     dirty_paths = collect_worktree_paths(root)
     unexpected_paths = [path for path in dirty_paths if path != plan.relative_path]
@@ -1478,6 +1829,374 @@ def prepare(
         )
 
 
+def _freshness_check(
+    root: Path,
+    plan_path: Path,
+    initial_plan: Plan,
+    initial_context: GitContext,
+    initial_changed_paths: tuple[str, ...],
+    initial_diff_hash: str,
+) -> tuple[CheckResult, Plan | None, GitContext | None]:
+    try:
+        current_policy = load_risk_policy(root / "harness" / "risk-policy.json")
+        current_plan = load_plan(root, plan_path, current_policy)
+        current_context = resolve_local_git_context(root, current_plan)
+        current_changed_paths = collect_local_changed_paths(
+            root,
+            current_context.merge_base_sha,
+        )
+        current_diff_hash = compute_diff_hash(
+            root,
+            current_context,
+            current_changed_paths,
+        )
+    except HarnessViolation as error:
+        plan_identity_checks = {
+            "plan.path",
+            "plan.schema",
+            "plan.scope",
+            "plan.contract-changes",
+            "git.branch",
+        }
+        state = (
+            State.REPLAN_REQUIRED
+            if error.check_id in plan_identity_checks
+            or error.state is State.REPLAN_REQUIRED
+            else error.state
+        )
+        return (
+            CheckResult(
+                "evidence.freshness",
+                state,
+                f"종료 identity를 확인할 수 없습니다: {error.check_id}: {error.reason}",
+            ),
+            None,
+            None,
+        )
+    except Exception as error:
+        return (
+            CheckResult(
+                "evidence.freshness",
+                State.FAIL,
+                f"종료 identity 확인 중 오류가 발생했습니다: {type(error).__name__}: {error}",
+            ),
+            None,
+            None,
+        )
+
+    comparisons = (
+        ("base tip", initial_context.base_tip_sha, current_context.base_tip_sha),
+        ("merge-base", initial_context.merge_base_sha, current_context.merge_base_sha),
+        ("HEAD", initial_context.candidate_head_sha, current_context.candidate_head_sha),
+        ("tested revision", initial_context.tested_revision_sha, current_context.tested_revision_sha),
+        ("plan path", initial_plan.relative_path, current_plan.relative_path),
+        ("plan hash", initial_plan.plan_hash, current_plan.plan_hash),
+        ("changed paths", initial_changed_paths, current_changed_paths),
+        ("diff hash", initial_diff_hash, current_diff_hash),
+    )
+    changed = [label for label, before, after in comparisons if before != after]
+    if changed:
+        return (
+            CheckResult(
+                "evidence.freshness",
+                State.REPLAN_REQUIRED,
+                f"검사 중 identity가 변경되었습니다: {', '.join(changed)}",
+            ),
+            current_plan,
+            current_context,
+        )
+    return (
+        CheckResult(
+            "evidence.freshness",
+            State.PASS,
+            "plan, base tip, merge-base, HEAD, paths, diff hash가 유지되었습니다.",
+        ),
+        current_plan,
+        current_context,
+    )
+
+
+def _evaluation_from_values(
+    *,
+    checks: Sequence[CheckResult],
+    plan_path: str,
+    plan: Plan | None,
+    context: GitContext | None,
+    classification: RiskClassification | None,
+    changed_paths: tuple[str, ...],
+    diff_hash: str | None,
+) -> Evaluation:
+    normalized_checks = tuple(checks)
+    return Evaluation(
+        schema_version=1,
+        state=aggregate_state(normalized_checks),
+        base_tip_sha=context.base_tip_sha if context is not None else None,
+        merge_base_sha=context.merge_base_sha if context is not None else None,
+        candidate_head_sha=(
+            context.candidate_head_sha if context is not None else None
+        ),
+        tested_revision_sha=(
+            context.tested_revision_sha if context is not None else None
+        ),
+        plan_path=plan.relative_path if plan is not None else plan_path,
+        plan_hash=plan.plan_hash if plan is not None else None,
+        declared_risks=plan.declared_risks if plan is not None else (),
+        detected_risks=(
+            classification.detected_risks if classification is not None else ()
+        ),
+        changed_paths=changed_paths,
+        diff_hash=diff_hash,
+        checks=normalized_checks,
+    )
+
+
+def evaluate(
+    root: Path,
+    plan_path: Path,
+    check_runner: Callable[[Path, Sequence[str]], object] = run_required_checks,
+) -> Evaluation:
+    requested_plan_path = plan_path.as_posix()
+    checks: list[CheckResult] = []
+    plan: Plan | None = None
+    context: GitContext | None = None
+    lock: PlanLock | None = None
+    classification: RiskClassification | None = None
+    changed_paths: tuple[str, ...] = ()
+    diff_hash: str | None = None
+    evaluation_path: Path | None = None
+    ending_plan: Plan | None = None
+    ending_context: GitContext | None = None
+
+    try:
+        resolved_root = _strict_repository_root(root)
+        evaluation_path = remove_stale_evaluation(resolved_root)
+    except HarnessViolation as error:
+        checks.append(CheckResult(error.check_id, error.state, error.reason))
+        return _evaluation_from_values(
+            checks=checks,
+            plan_path=requested_plan_path,
+            plan=None,
+            context=None,
+            classification=None,
+            changed_paths=(),
+            diff_hash=None,
+        )
+    except Exception as error:
+        checks.append(
+            CheckResult(
+                "harness.internal",
+                State.FAIL,
+                f"{type(error).__name__}: {error}",
+            )
+        )
+        return _evaluation_from_values(
+            checks=checks,
+            plan_path=requested_plan_path,
+            plan=None,
+            context=None,
+            classification=None,
+            changed_paths=(),
+            diff_hash=None,
+        )
+
+    try:
+        policy = load_risk_policy(resolved_root / "harness" / "risk-policy.json")
+        plan = load_plan(resolved_root, plan_path, policy)
+        context = resolve_local_git_context(resolved_root, plan)
+        lock = load_plan_lock(safe_evidence_lock_path(resolved_root))
+        validate_plan_lock(lock, plan, context)
+        checks.append(
+            CheckResult(
+                "plan.lock",
+                State.PASS,
+                "prepare 시점의 plan, branch, base tip, merge-base와 일치합니다.",
+            )
+        )
+
+        changed_paths = collect_local_changed_paths(
+            resolved_root,
+            context.merge_base_sha,
+        )
+        diff_hash = compute_diff_hash(resolved_root, context, changed_paths)
+
+        validate_existing_migrations_immutable(
+            resolved_root,
+            context,
+            changed_paths,
+        )
+        checks.append(
+            CheckResult(
+                "migration.immutable",
+                State.PASS,
+                "기존 Flyway migration 변경이 없습니다.",
+            )
+        )
+
+        outside_paths = scope_violations(changed_paths, plan)
+        if outside_paths:
+            raise _violation(
+                State.REPLAN_REQUIRED,
+                "scope.allowed-paths",
+                f"allowedPaths 밖 변경이 있습니다: {list(outside_paths)}",
+            )
+        checks.append(
+            CheckResult(
+                "scope.allowed-paths",
+                State.PASS,
+                "모든 변경 경로가 plan 범위 안에 있습니다.",
+            )
+        )
+
+        classification = classify_risks(
+            changed_paths,
+            policy,
+            plan.relative_path,
+        )
+        if classification.unclassified_paths:
+            raise _violation(
+                State.REPLAN_REQUIRED,
+                "risk.classification",
+                f"미분류 경로가 있습니다: {list(classification.unclassified_paths)}",
+            )
+        checks.append(
+            CheckResult(
+                "risk.classification",
+                State.PASS,
+                "모든 변경 경로가 위험 정책으로 분류되었습니다.",
+            )
+        )
+
+        validate_risk_declarations(plan, classification)
+        checks.append(
+            CheckResult(
+                "risk.declaration",
+                State.PASS,
+                "감지된 위험이 plan에 선언되었습니다.",
+            )
+        )
+
+        validate_contract_changes(changed_paths, plan, policy)
+        checks.append(
+            CheckResult(
+                "trust-root.contract",
+                State.PASS,
+                "보호 경로 변경이 정확한 contractChanges로 선언되었습니다.",
+            )
+        )
+
+        requested_ids = required_check_ids(plan, classification, policy)
+        raw_runner_results = check_runner(resolved_root, requested_ids)
+        runner_results, runner_error = validate_check_runner_results(
+            raw_runner_results,
+            requested_ids,
+        )
+        checks.extend(runner_results)
+        if runner_error is not None:
+            checks.append(runner_error)
+    except HarnessViolation as error:
+        checks.append(CheckResult(error.check_id, error.state, error.reason))
+    except Exception as error:
+        checks.append(
+            CheckResult(
+                "harness.internal",
+                State.FAIL,
+                f"{type(error).__name__}: {error}",
+            )
+        )
+
+    if plan is not None and context is not None and diff_hash is not None:
+        freshness, ending_plan, ending_context = _freshness_check(
+            resolved_root,
+            plan_path,
+            plan,
+            context,
+            changed_paths,
+            diff_hash,
+        )
+        checks.append(freshness)
+
+    can_write = evaluation_path is not None
+    lock_restore_path: Path | None = None
+    if lock is not None:
+        if ending_plan is None or ending_context is None:
+            checks.append(
+                CheckResult(
+                    "plan.lock.restore",
+                    State.BLOCKED,
+                    "종료 plan/context를 검증하지 못해 plan lock을 복구하지 않습니다.",
+                )
+            )
+        else:
+            try:
+                validate_plan_lock(lock, ending_plan, ending_context)
+            except HarnessViolation as error:
+                checks.append(
+                    CheckResult(
+                        "plan.lock.restore",
+                        error.state,
+                        f"stale plan lock을 복구하지 않습니다: {error.reason}",
+                    )
+                )
+            else:
+                lock_restore_path = resolved_root / "build" / "harness" / "plan.lock.json"
+
+    try:
+        final_evaluation_path = safe_evidence_evaluation_path(resolved_root)
+        if evaluation_path is not None and final_evaluation_path != evaluation_path:
+            raise _evidence_path_error("evaluation path가 검사 중 변경되었습니다.")
+        evaluation_path = final_evaluation_path
+        if lock_restore_path is not None:
+            final_lock_path = safe_evidence_lock_path(resolved_root)
+            if final_lock_path != lock_restore_path:
+                raise _evidence_path_error("plan lock path가 검사 중 변경되었습니다.")
+            lock_restore_path = final_lock_path
+    except HarnessViolation as error:
+        checks.append(CheckResult(error.check_id, error.state, error.reason))
+        can_write = False
+    except Exception as error:
+        checks.append(
+            CheckResult(
+                "evidence.path",
+                State.FAIL,
+                f"evaluation path 재검사 중 오류가 발생했습니다: {type(error).__name__}: {error}",
+            )
+        )
+        can_write = False
+
+    evaluation = _evaluation_from_values(
+        checks=checks,
+        plan_path=requested_plan_path,
+        plan=plan,
+        context=context,
+        classification=classification,
+        changed_paths=changed_paths,
+        diff_hash=diff_hash,
+    )
+    if can_write and evaluation_path is not None:
+        try:
+            if lock is not None and lock_restore_path is not None:
+                write_json_atomic(lock_restore_path, plan_lock_payload(lock))
+            write_json_atomic(evaluation_path, evaluation.to_dict())
+        except Exception as error:
+            checks.append(
+                CheckResult(
+                    "evidence.write",
+                    State.FAIL,
+                    f"evaluation을 기록할 수 없습니다: {type(error).__name__}: {error}",
+                )
+            )
+            evaluation = _evaluation_from_values(
+                checks=checks,
+                plan_path=requested_plan_path,
+                plan=plan,
+                context=context,
+                classification=classification,
+                changed_paths=changed_paths,
+                diff_hash=diff_hash,
+            )
+    return evaluation
+
+
 class CliParser(argparse.ArgumentParser):
     def error(self, message: str) -> None:
         raise _violation(State.FAIL, "cli.arguments", message)
@@ -1488,6 +2207,8 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     prepare_parser = subparsers.add_parser("prepare")
     prepare_parser.add_argument("plan", type=Path)
+    evaluate_parser = subparsers.add_parser("evaluate")
+    evaluate_parser.add_argument("plan", type=Path)
     return parser
 
 
@@ -1504,6 +2225,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             state, checks = prepare(root, arguments.plan)
             print_checks(checks)
             return int(state)
+        if arguments.command == "evaluate":
+            evaluation = evaluate(root, arguments.plan)
+            print_checks(evaluation.checks)
+            return int(evaluation.state)
         raise _violation(State.FAIL, "cli.arguments", "지원하지 않는 command입니다.")
     except HarnessViolation as error:
         print(
