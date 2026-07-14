@@ -1511,60 +1511,12 @@ def validate_preflight_results(raw_checks: Sequence[CheckResult]) -> tuple[Check
 
     check_ids: list[str] = []
     for check in checks:
-        if not isinstance(check, CheckResult):
+        schema_error = _check_result_schema_error(check, "preflight")
+        if schema_error is not None:
             raise _violation(
                 State.FAIL,
                 "environment.preflight",
-                "preflight 결과는 CheckResult여야 합니다.",
-            )
-        if (
-            not isinstance(check.check_id, str)
-            or not check.check_id
-            or check.check_id != check.check_id.strip()
-            or any(
-                unicodedata.category(character) == "Cc"
-                for character in check.check_id
-            )
-        ):
-            raise _violation(
-                State.FAIL,
-                "environment.preflight",
-                "preflight check_id가 올바르지 않습니다.",
-            )
-        if not isinstance(check.state, State):
-            raise _violation(
-                State.FAIL,
-                "environment.preflight",
-                f"preflight state가 올바르지 않습니다: {check.check_id}",
-            )
-        if not isinstance(check.reason, str):
-            raise _violation(
-                State.FAIL,
-                "environment.preflight",
-                f"preflight reason이 문자열이 아닙니다: {check.check_id}",
-            )
-        if not isinstance(check.command, tuple) or any(
-            not isinstance(argument, str) for argument in check.command
-        ):
-            raise _violation(
-                State.FAIL,
-                "environment.preflight",
-                f"preflight command가 문자열 tuple이 아닙니다: {check.check_id}",
-            )
-        if check.exit_code is not None and type(check.exit_code) is not int:
-            raise _violation(
-                State.FAIL,
-                "environment.preflight",
-                f"preflight exit_code가 올바르지 않습니다: {check.check_id}",
-            )
-        if (
-            check.duration_ms is not None
-            and (type(check.duration_ms) is not int or check.duration_ms < 0)
-        ):
-            raise _violation(
-                State.FAIL,
-                "environment.preflight",
-                f"preflight duration_ms가 올바르지 않습니다: {check.check_id}",
+                schema_error,
             )
         check_ids.append(check.check_id)
 
@@ -1616,12 +1568,13 @@ def execute_command(
         )
 
     duration_ms = int((time.monotonic() - started) * 1000)
-    output = _last_output(result.stdout, result.stderr)
+    full_output = (result.stdout + result.stderr).decode("utf-8", errors="replace")
+    output = full_output[-4000:].strip()
     if result.returncode == 0:
         state = State.PASS
     elif (
         check_id == "gradle.test"
-        and "Could not find a valid Docker environment" in output
+        and "Could not find a valid Docker environment" in full_output
     ):
         state = State.BLOCKED
     else:
@@ -1689,30 +1642,30 @@ def run_required_checks(
     return tuple(checks)
 
 
-def _check_result_schema_error(check: object) -> str | None:
+def _check_result_schema_error(check: object, source_label: str) -> str | None:
     if not isinstance(check, CheckResult):
-        return "check runner 결과는 CheckResult여야 합니다."
+        return f"{source_label} 결과는 CheckResult여야 합니다."
     if (
         not isinstance(check.check_id, str)
         or not check.check_id
         or check.check_id != check.check_id.strip()
         or any(unicodedata.category(character) == "Cc" for character in check.check_id)
     ):
-        return "check runner check_id가 올바르지 않습니다."
+        return f"{source_label} check_id가 올바르지 않습니다."
     if not isinstance(check.state, State):
-        return f"check runner state가 올바르지 않습니다: {check.check_id}"
+        return f"{source_label} state가 올바르지 않습니다: {check.check_id}"
     if not isinstance(check.reason, str):
-        return f"check runner reason이 문자열이 아닙니다: {check.check_id}"
+        return f"{source_label} reason이 문자열이 아닙니다: {check.check_id}"
     if not isinstance(check.command, tuple) or any(
         not isinstance(argument, str) for argument in check.command
     ):
-        return f"check runner command가 문자열 tuple이 아닙니다: {check.check_id}"
+        return f"{source_label} command가 문자열 tuple이 아닙니다: {check.check_id}"
     if check.exit_code is not None and type(check.exit_code) is not int:
-        return f"check runner exit_code가 올바르지 않습니다: {check.check_id}"
+        return f"{source_label} exit_code가 올바르지 않습니다: {check.check_id}"
     if check.duration_ms is not None and (
         type(check.duration_ms) is not int or check.duration_ms < 0
     ):
-        return f"check runner duration_ms가 올바르지 않습니다: {check.check_id}"
+        return f"{source_label} duration_ms가 올바르지 않습니다: {check.check_id}"
     return None
 
 
@@ -1731,7 +1684,7 @@ def validate_check_runner_results(
 
     valid_checks: list[CheckResult] = []
     for candidate in candidates:
-        schema_error = _check_result_schema_error(candidate)
+        schema_error = _check_result_schema_error(candidate, "check runner")
         if schema_error is not None:
             return tuple(valid_checks), CheckResult(
                 "checks.runner",

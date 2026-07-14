@@ -1970,6 +1970,21 @@ class EvaluationTest(unittest.TestCase):
         self.assertEqual(1, result.exit_code)
         self.assertIn("Could not find a valid Docker environment", result.reason)
 
+    def test_gradle_docker_marker_before_truncated_evidence_is_blocked(self) -> None:
+        result = HARNESS.execute_command(
+            REPO_ROOT,
+            "gradle.test",
+            (
+                sys.executable,
+                "-c",
+                "import sys; sys.stdout.buffer.write(b'Could not find a valid Docker environment\\n' + b'x' * 5000); sys.exit(1)",
+            ),
+        )
+
+        self.assertEqual(HARNESS.State.BLOCKED, result.state)
+        self.assertEqual(1, result.exit_code)
+        self.assertEqual("x" * 4000, result.reason)
+
     def test_unexpected_cli_exception_includes_exception_type(self) -> None:
         stderr = io.StringIO()
 

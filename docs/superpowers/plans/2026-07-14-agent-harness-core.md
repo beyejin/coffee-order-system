@@ -1147,7 +1147,10 @@ def test_prepare_environment_block_does_not_write_lock(self) -> None:
     fixture = GitFixture(issue=123)
     self.addCleanup(fixture.close)
     blocked = lambda root: (
+        HARNESS.CheckResult("environment.python", HARNESS.State.PASS, str(root)),
+        HARNESS.CheckResult("environment.java", HARNESS.State.PASS, str(root)),
         HARNESS.CheckResult("environment.docker", HARNESS.State.BLOCKED, "daemon off"),
+        HARNESS.CheckResult("environment.java17-toolchain", HARNESS.State.PASS, str(root)),
     )
     state, _ = HARNESS.prepare(fixture.root, fixture.plan_path, preflight=blocked)
     self.assertEqual(HARNESS.State.BLOCKED, state)
