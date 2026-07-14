@@ -1162,8 +1162,6 @@ def _safe_evidence_path(root: Path, filename: str) -> Path:
 
     _ensure_safe_evidence_directory(resolved_root, build_directory)
     _ensure_safe_evidence_directory(resolved_root, harness_directory)
-    _ensure_safe_evidence_directory(resolved_root, build_directory)
-    _ensure_safe_evidence_directory(resolved_root, harness_directory)
     path = harness_directory / filename
     try:
         target_status = path.lstat()
@@ -1754,7 +1752,10 @@ def validate_check_runner_results(
         )
 
     requested = tuple(requested_ids)
-    missing = sorted(set(requested) - set(check_ids))
+    required_ids = set(requested)
+    if "gradle.test" in requested:
+        required_ids.update(REQUIRED_PREFLIGHT_CHECK_IDS)
+    missing = sorted(required_ids - set(check_ids))
     if missing:
         return tuple(valid_checks), CheckResult(
             "checks.runner",
@@ -1828,7 +1829,11 @@ def prepare(
         return error.state, (CheckResult(error.check_id, error.state, error.reason),)
     except Exception as error:
         return State.FAIL, (
-            CheckResult("harness.internal", State.FAIL, str(error)),
+            CheckResult(
+                "harness.internal",
+                State.FAIL,
+                f"{type(error).__name__}: {error}",
+            ),
         )
 
 
@@ -2240,7 +2245,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return int(error.state)
     except Exception as error:
-        print(f"[FAIL] harness.internal: {str(error)!r}", file=sys.stderr)
+        reason = f"{type(error).__name__}: {error}"
+        print(f"[FAIL] harness.internal: {reason!r}", file=sys.stderr)
         return int(State.FAIL)
 
 

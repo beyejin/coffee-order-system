@@ -13,6 +13,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -102,10 +103,21 @@ def passing_required_checks(
     _root: Path,
     check_ids: tuple[str, ...],
 ) -> tuple[object, ...]:
-    return tuple(
-        HARNESS.CheckResult(check_id, HARNESS.State.PASS, "fixture pass")
-        for check_id in check_ids
-    )
+    checks: list[object] = []
+    for check_id in check_ids:
+        if check_id == "gradle.test":
+            checks.extend(
+                HARNESS.CheckResult(
+                    preflight_id,
+                    HARNESS.State.PASS,
+                    "fixture pass",
+                )
+                for preflight_id in REQUIRED_PREFLIGHT_IDS
+            )
+        checks.append(
+            HARNESS.CheckResult(check_id, HARNESS.State.PASS, "fixture pass")
+        )
+    return tuple(checks)
 
 
 def make_plan(
@@ -1565,6 +1577,49 @@ class EvaluationTest(unittest.TestCase):
                     any(check["id"] == "checks.runner" for check in evidence["checks"])
                 )
 
+    def test_gradle_result_without_preflight_results_fails_closed(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        fixture.prepare_scope_only_change()
+
+        def requested_only_runner(
+            _root: Path,
+            check_ids: tuple[str, ...],
+        ) -> tuple[object, ...]:
+            return tuple(
+                HARNESS.CheckResult(check_id, HARNESS.State.PASS, "fixture pass")
+                for check_id in check_ids
+            )
+
+        evaluation = HARNESS.evaluate(
+            fixture.work,
+            fixture.plan(),
+            check_runner=requested_only_runner,
+        )
+        runner_checks = [
+            check for check in evaluation.checks if check.check_id == "checks.runner"
+        ]
+
+        self.assertEqual(HARNESS.State.FAIL, evaluation.state)
+        self.assertEqual(1, len(runner_checks))
+        runner_check = runner_checks[0]
+        self.assertEqual(HARNESS.State.FAIL, runner_check.state)
+        for check_id in REQUIRED_PREFLIGHT_IDS:
+            self.assertIn(check_id, runner_check.reason)
+
+    def test_preflight_results_are_not_required_without_gradle_request(self) -> None:
+        raw_checks = (
+            HARNESS.CheckResult("harness.unit", HARNESS.State.PASS, "fixture pass"),
+        )
+
+        checks, error = HARNESS.validate_check_runner_results(
+            raw_checks,
+            ("harness.unit",),
+        )
+
+        self.assertEqual(raw_checks, checks)
+        self.assertIsNone(error)
+
     def test_runner_exception_after_commit_still_records_replan_freshness(self) -> None:
         fixture = GitFixture()
         self.addCleanup(fixture.close)
@@ -1913,6 +1968,39 @@ class EvaluationTest(unittest.TestCase):
         self.assertEqual(HARNESS.State.FAIL, result.state)
         self.assertEqual(1, result.exit_code)
         self.assertIn("Could not find a valid Docker environment", result.reason)
+
+    def test_unexpected_cli_exception_includes_exception_type(self) -> None:
+        stderr = io.StringIO()
+
+        with patch.object(
+            HARNESS,
+            "find_git_root",
+            side_effect=RuntimeError("boom"),
+        ), redirect_stderr(stderr):
+            exit_code = HARNESS.main(("prepare", "harness/plans/3.json"))
+
+        self.assertEqual(1, exit_code)
+        self.assertEqual(
+            "[FAIL] harness.internal: 'RuntimeError: boom'\n",
+            stderr.getvalue(),
+        )
+
+    def test_unexpected_prepare_exception_records_exception_type(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+
+        def exploding_preflight(_root: Path) -> tuple[object, ...]:
+            raise RuntimeError("boom")
+
+        state, checks = HARNESS.prepare(
+            fixture.work,
+            fixture.plan(),
+            preflight=exploding_preflight,
+        )
+
+        self.assertEqual(HARNESS.State.FAIL, state)
+        self.assertEqual("harness.internal", checks[0].check_id)
+        self.assertEqual("RuntimeError: boom", checks[0].reason)
 
 
 if __name__ == "__main__":
