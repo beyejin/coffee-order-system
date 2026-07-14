@@ -66,6 +66,12 @@ class RiskPolicy:
 
 
 @dataclass(frozen=True)
+class RiskClassification:
+    detected_risks: tuple[str, ...]
+    unclassified_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class GitContext:
     branch: str
     target_branch: str
@@ -730,6 +736,235 @@ def collect_worktree_paths(root: Path) -> tuple[str, ...]:
         run_git(root, "ls-files", "--others", "--exclude-standard", "-z")
     )
     return tuple(sorted(set(cached) | set(unstaged) | set(untracked)))
+
+
+def collect_local_changed_paths(
+    root: Path,
+    merge_base_sha: str,
+) -> tuple[str, ...]:
+    committed = parse_name_status(
+        run_git(
+            root,
+            "diff",
+            "--name-status",
+            "-z",
+            "--find-renames",
+            "--find-copies-harder",
+            merge_base_sha,
+            "HEAD",
+            "--",
+        )
+    )
+    cached = parse_name_status(
+        run_git(
+            root,
+            "diff",
+            "--cached",
+            "--name-status",
+            "-z",
+            "--find-renames",
+            "--find-copies-harder",
+            "--",
+        )
+    )
+    unstaged = parse_name_status(
+        run_git(
+            root,
+            "diff",
+            "--name-status",
+            "-z",
+            "--find-renames",
+            "--find-copies-harder",
+            "--",
+        )
+    )
+    untracked = parse_nul_paths(
+        run_git(root, "ls-files", "--others", "--exclude-standard", "-z")
+    )
+    return tuple(
+        sorted(set(committed) | set(cached) | set(unstaged) | set(untracked))
+    )
+
+
+def scope_violations(
+    changed_paths: Iterable[str],
+    plan: Plan,
+) -> tuple[str, ...]:
+    violations = {
+        path
+        for path in changed_paths
+        if path != plan.relative_path
+        and not any(path_matches(pattern, path) for pattern in plan.allowed_paths)
+    }
+    return tuple(sorted(violations))
+
+
+def classify_risks(
+    changed_paths: Iterable[str],
+    policy: RiskPolicy,
+    plan_path: str = "",
+) -> RiskClassification:
+    detected_risks: set[str] = set()
+    unclassified_paths: list[str] = []
+
+    for path in sorted(set(changed_paths)):
+        if path == plan_path:
+            continue
+
+        matched = False
+        for rule in policy.rules:
+            if any(path_matches(pattern, path) for pattern in rule.patterns):
+                matched = True
+                detected_risks.update(rule.risks)
+        if not matched:
+            unclassified_paths.append(path)
+
+    return RiskClassification(
+        detected_risks=tuple(sorted(detected_risks)),
+        unclassified_paths=tuple(unclassified_paths),
+    )
+
+
+def validate_risk_declarations(
+    plan: Plan,
+    classification: RiskClassification,
+) -> None:
+    if classification.unclassified_paths:
+        rendered_paths = ", ".join(
+            repr(path) for path in classification.unclassified_paths
+        )
+        raise _violation(
+            State.REPLAN_REQUIRED,
+            "risk.classification",
+            f"미분류 경로가 있습니다: {rendered_paths}",
+        )
+
+    undeclared_risks = sorted(
+        set(classification.detected_risks) - set(plan.declared_risks)
+    )
+    if undeclared_risks:
+        raise _violation(
+            State.REPLAN_REQUIRED,
+            "risk.declaration",
+            f"감지되었지만 미선언된 위험이 있습니다: {undeclared_risks}",
+        )
+
+
+def validate_contract_changes(
+    changed_paths: Iterable[str],
+    plan: Plan,
+    policy: RiskPolicy,
+) -> None:
+    declared_paths = {
+        contract_change_path(declaration) for declaration in plan.contract_changes
+    }
+    undeclared_protected_paths = sorted(
+        {
+            path
+            for path in changed_paths
+            if path != plan.relative_path
+            and any(
+                path_matches(pattern, path)
+                for pattern in policy.protected_patterns
+            )
+            and path not in declared_paths
+        }
+    )
+    if undeclared_protected_paths:
+        rendered_paths = ", ".join(
+            repr(path) for path in undeclared_protected_paths
+        )
+        raise _violation(
+            State.REPLAN_REQUIRED,
+            "trust-root.contract",
+            f"보호 경로의 정확한 contractChanges 선언이 없습니다: {rendered_paths}",
+        )
+
+
+def validate_existing_migrations_immutable(
+    root: Path,
+    context: GitContext,
+    changed_paths: Iterable[str],
+) -> None:
+    migration_prefix = "src/main/resources/db/migration/"
+    reported_changed_paths = set(changed_paths)
+    base_migrations = set(
+        parse_nul_paths(
+            run_git(
+                root,
+                "ls-tree",
+                "-r",
+                "-z",
+                "--name-only",
+                context.merge_base_sha,
+                "--",
+                migration_prefix,
+            )
+        )
+    )
+    committed_mutations = parse_name_status(
+        run_git(
+            root,
+            "diff",
+            "--name-status",
+            "-z",
+            "--no-renames",
+            "--no-ext-diff",
+            context.merge_base_sha,
+            "HEAD",
+            "--",
+            migration_prefix,
+        )
+    )
+    cached_mutations = parse_name_status(
+        run_git(
+            root,
+            "diff",
+            "--cached",
+            "--name-status",
+            "-z",
+            "--no-renames",
+            "--no-ext-diff",
+            "--",
+            migration_prefix,
+        )
+    )
+    unstaged_mutations = parse_name_status(
+        run_git(
+            root,
+            "diff",
+            "--name-status",
+            "-z",
+            "--no-renames",
+            "--no-ext-diff",
+            "--",
+            migration_prefix,
+        )
+    )
+    actual_mutation_paths = (
+        set(committed_mutations) | set(cached_mutations) | set(unstaged_mutations)
+    )
+    missing_reported_paths = sorted(
+        actual_mutation_paths - reported_changed_paths
+    )
+    if missing_reported_paths:
+        rendered_paths = ", ".join(repr(path) for path in missing_reported_paths)
+        raise _git_diff_error(
+            f"전체 diff 수집에서 실제 migration 변경 경로가 누락되었습니다: {rendered_paths}"
+        )
+
+    modified_existing_migrations = sorted(
+        base_migrations.intersection(actual_mutation_paths)
+    )
+    if modified_existing_migrations:
+        rendered_paths = ", ".join(
+            repr(path) for path in modified_existing_migrations
+        )
+        raise _violation(
+            State.FAIL,
+            "migration.immutable",
+            f"기존 Flyway migration은 수정, 삭제, rename할 수 없습니다: {rendered_paths}",
+        )
 
 
 def _evidence_path_error(reason: str) -> HarnessViolation:

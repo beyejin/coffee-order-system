@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import inspect
 import io
 import json
 import subprocess
@@ -95,6 +96,57 @@ def passing_preflight(root: Path) -> tuple[object, ...]:
     return fixture_preflight(root, HARNESS.State.PASS)
 
 
+def make_plan(
+    allowed_paths: tuple[str, ...] = ("AGENTS.md",),
+    declared_risks: tuple[str, ...] = ("completion",),
+    contract_changes: tuple[str, ...] = (),
+) -> object:
+    return HARNESS.Plan(
+        issue=123,
+        target_branch="main",
+        objective="임시 저장소의 하네스 판정 검증",
+        allowed_paths=allowed_paths,
+        acceptance_criteria=("현재 diff만 판정한다.",),
+        declared_risks=declared_risks,
+        contract_changes=contract_changes,
+        non_goals=("제품 코드 변경",),
+        relative_path="harness/plans/123.json",
+        plan_hash="0" * 64,
+    )
+
+
+def make_policy(rules: tuple[object, ...] | None = None) -> object:
+    known_risks = frozenset(
+        {
+            "scope",
+            "architecture",
+            "api",
+            "migration",
+            "transaction",
+            "concurrency",
+            "async",
+            "multi-instance",
+            "completion",
+        }
+    )
+    if rules is None:
+        rules = (
+            HARNESS.RiskRule(
+                rule_id="agent-router",
+                patterns=("AGENTS.md",),
+                risks=("completion",),
+            ),
+        )
+    return HARNESS.RiskPolicy(
+        schema_version=1,
+        known_risks=known_risks,
+        rules=rules,
+        protected_patterns=("scripts/agent-harness.py",),
+        risk_checks={risk: (f"dummy.{risk}",) for risk in known_risks},
+        implemented_checks=frozenset(),
+    )
+
+
 class GitFixture:
     def __init__(self, issue: int = 123) -> None:
         self.issue = issue
@@ -162,13 +214,25 @@ class GitFixture:
 
     def create_all_change_kinds(self) -> None:
         (self.work / "committed.txt").write_text("committed\n", encoding="utf-8")
+        git(self.work, "mv", "rename-old.txt", "rename-new.txt")
         git(self.work, "add", "committed.txt")
         git(self.work, "commit", "-m", "candidate commit")
         (self.work / "staged.txt").write_text("staged\n", encoding="utf-8")
         git(self.work, "add", "staged.txt")
-        git(self.work, "mv", "rename-old.txt", "rename-new.txt")
         (self.work / "tracked.txt").write_text("unstaged\n", encoding="utf-8")
         (self.work / "untracked.txt").write_text("untracked\n", encoding="utf-8")
+
+    def context(self, merge_base_sha: str | None = None) -> object:
+        base_tip_sha = git(self.work, "rev-parse", "origin/main")
+        candidate_head_sha = git(self.work, "rev-parse", "HEAD")
+        return HARNESS.GitContext(
+            branch=f"feature/{self.issue}-agent-harness-core",
+            target_branch="main",
+            base_tip_sha=base_tip_sha,
+            merge_base_sha=merge_base_sha or base_tip_sha,
+            candidate_head_sha=candidate_head_sha,
+            tested_revision_sha=candidate_head_sha,
+        )
 
     def prepare_and_add_outside_path(self) -> None:
         state, _checks = HARNESS.prepare(
@@ -510,6 +574,381 @@ class StateAndPlanTest(unittest.TestCase):
 
             with self.assertRaisesRegex(HARNESS.HarnessViolation, "riskChecks에 없는"):
                 HARNESS.load_risk_policy(policy_path)
+
+
+class ScopeRiskTest(unittest.TestCase):
+    def test_scope_implicitly_allows_selected_plan_path(self) -> None:
+        plan = make_plan()
+
+        self.assertEqual(
+            (),
+            HARNESS.scope_violations(
+                (plan.relative_path, "AGENTS.md"),
+                plan,
+            ),
+        )
+
+    def test_scope_reports_sorted_tracked_and_untracked_outside_paths(self) -> None:
+        plan = make_plan()
+
+        self.assertEqual(
+            ("README.md", "new.txt"),
+            HARNESS.scope_violations(
+                ("new.txt", "README.md", "new.txt", "AGENTS.md"),
+                plan,
+            ),
+        )
+
+    def test_risk_classification_unions_overlapping_rules(self) -> None:
+        policy = make_policy(
+            rules=(
+                HARNESS.RiskRule(
+                    rule_id="java-source",
+                    patterns=("src/main/java/**",),
+                    risks=("architecture",),
+                ),
+                HARNESS.RiskRule(
+                    rule_id="order-source",
+                    patterns=("src/main/java/com/example/coffee/order/**",),
+                    risks=("async",),
+                ),
+            )
+        )
+
+        classification = HARNESS.classify_risks(
+            ("src/main/java/com/example/coffee/order/Order.java",),
+            policy,
+        )
+
+        self.assertEqual(("architecture", "async"), classification.detected_risks)
+        self.assertEqual((), classification.unclassified_paths)
+
+    def test_source_policy_classifies_api_document_with_completion(self) -> None:
+        classification = HARNESS.classify_risks(
+            ("docs/api-spec.md",),
+            HARNESS.load_risk_policy(SOURCE_POLICY),
+        )
+
+        self.assertEqual(("api", "completion"), classification.detected_risks)
+        self.assertEqual((), classification.unclassified_paths)
+
+    def test_source_policy_classifies_table_document_with_completion(self) -> None:
+        classification = HARNESS.classify_risks(
+            ("docs/table-spec.md",),
+            HARNESS.load_risk_policy(SOURCE_POLICY),
+        )
+
+        self.assertEqual(
+            ("completion", "migration"),
+            classification.detected_risks,
+        )
+        self.assertEqual((), classification.unclassified_paths)
+
+    def test_unclassified_path_requires_replan_before_declaration_check(self) -> None:
+        classification = HARNESS.classify_risks(
+            ("unknown/new.file",),
+            make_policy(),
+        )
+
+        with self.assertRaises(HARNESS.HarnessViolation) as raised:
+            HARNESS.validate_risk_declarations(make_plan(), classification)
+
+        self.assertEqual(HARNESS.State.REPLAN_REQUIRED, raised.exception.state)
+        self.assertEqual("risk.classification", raised.exception.check_id)
+        self.assertIn("미분류", raised.exception.reason)
+        self.assertIn("unknown/new.file", raised.exception.reason)
+
+    def test_detected_but_undeclared_risk_requires_replan(self) -> None:
+        policy = make_policy(
+            rules=(
+                HARNESS.RiskRule(
+                    rule_id="api-document",
+                    patterns=("docs/api-spec.md",),
+                    risks=("api",),
+                ),
+            )
+        )
+        classification = HARNESS.classify_risks(("docs/api-spec.md",), policy)
+
+        with self.assertRaises(HARNESS.HarnessViolation) as raised:
+            HARNESS.validate_risk_declarations(
+                make_plan(declared_risks=("scope",)),
+                classification,
+            )
+
+        self.assertEqual(HARNESS.State.REPLAN_REQUIRED, raised.exception.state)
+        self.assertEqual("risk.declaration", raised.exception.check_id)
+        self.assertIn("api", raised.exception.reason)
+
+    def test_changed_protected_path_requires_contract_declaration(self) -> None:
+        with self.assertRaises(HARNESS.HarnessViolation) as raised:
+            HARNESS.validate_contract_changes(
+                ("scripts/agent-harness.py",),
+                make_plan(),
+                make_policy(),
+            )
+
+        self.assertEqual(HARNESS.State.REPLAN_REQUIRED, raised.exception.state)
+        self.assertEqual("trust-root.contract", raised.exception.check_id)
+
+    def test_contract_declaration_near_matches_are_not_accepted(self) -> None:
+        cases = (
+            ("scripts/agent-harness.py-malicious v1", "trust-root.contract"),
+            ("not scripts/agent-harness.py changed", "plan.contract-changes"),
+        )
+        for declaration, expected_check_id in cases:
+            with self.subTest(declaration=declaration):
+                with self.assertRaises(HARNESS.HarnessViolation) as raised:
+                    HARNESS.validate_contract_changes(
+                        ("scripts/agent-harness.py",),
+                        make_plan(contract_changes=(declaration,)),
+                        make_policy(),
+                    )
+
+                self.assertEqual(
+                    HARNESS.State.REPLAN_REQUIRED,
+                    raised.exception.state,
+                )
+                self.assertEqual(expected_check_id, raised.exception.check_id)
+
+    def test_exact_contract_declaration_is_accepted(self) -> None:
+        HARNESS.validate_contract_changes(
+            ("scripts/agent-harness.py",),
+            make_plan(contract_changes=("scripts/agent-harness.py v1",)),
+            make_policy(),
+        )
+
+    def test_public_validation_functions_keep_approved_positional_contract(self) -> None:
+        self.assertEqual(
+            ("plan", "classification"),
+            tuple(inspect.signature(HARNESS.validate_risk_declarations).parameters),
+        )
+        self.assertEqual(
+            ("changed_paths", "plan", "policy"),
+            tuple(inspect.signature(HARNESS.validate_contract_changes).parameters),
+        )
+
+        classification = HARNESS.RiskClassification(
+            detected_risks=(),
+            unclassified_paths=("unknown/new.file",),
+        )
+        with self.assertRaises(HARNESS.HarnessViolation) as raised:
+            HARNESS.validate_risk_declarations(make_plan(), classification)
+
+        self.assertEqual(HARNESS.State.REPLAN_REQUIRED, raised.exception.state)
+        self.assertEqual("risk.classification", raised.exception.check_id)
+
+    def test_existing_migration_actual_modify_fails(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        context = fixture.context()
+        existing_path = "src/main/resources/db/migration/V1__fixture.sql"
+        (fixture.work / existing_path).write_text(
+            "create table fixture(id varchar(255));\n",
+            encoding="utf-8",
+        )
+        changed_paths = HARNESS.collect_local_changed_paths(
+            fixture.work,
+            context.merge_base_sha,
+        )
+
+        with self.assertRaises(HARNESS.HarnessViolation) as raised:
+            HARNESS.validate_existing_migrations_immutable(
+                fixture.work,
+                context,
+                changed_paths,
+            )
+
+        self.assertIn(existing_path, changed_paths)
+        self.assertEqual(HARNESS.State.FAIL, raised.exception.state)
+        self.assertEqual("migration.immutable", raised.exception.check_id)
+        self.assertIn(existing_path, raised.exception.reason)
+
+    def test_existing_migration_actual_delete_fails(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        context = fixture.context()
+        existing_path = "src/main/resources/db/migration/V1__fixture.sql"
+        (fixture.work / existing_path).unlink()
+        changed_paths = HARNESS.collect_local_changed_paths(
+            fixture.work,
+            context.merge_base_sha,
+        )
+
+        with self.assertRaises(HARNESS.HarnessViolation) as raised:
+            HARNESS.validate_existing_migrations_immutable(
+                fixture.work,
+                context,
+                changed_paths,
+            )
+
+        self.assertIn(existing_path, changed_paths)
+        self.assertEqual(HARNESS.State.FAIL, raised.exception.state)
+        self.assertEqual("migration.immutable", raised.exception.check_id)
+
+    def test_existing_migration_actual_rename_fails(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        context = fixture.context()
+        existing_path = "src/main/resources/db/migration/V1__fixture.sql"
+        renamed_path = "src/main/resources/db/migration/V2__renamed.sql"
+        git(fixture.work, "mv", existing_path, renamed_path)
+        changed_paths = HARNESS.collect_local_changed_paths(
+            fixture.work,
+            context.merge_base_sha,
+        )
+
+        with self.assertRaises(HARNESS.HarnessViolation) as raised:
+            HARNESS.validate_existing_migrations_immutable(
+                fixture.work,
+                context,
+                changed_paths,
+            )
+
+        self.assertIn(existing_path, changed_paths)
+        self.assertIn(renamed_path, changed_paths)
+        self.assertEqual(HARNESS.State.FAIL, raised.exception.state)
+        self.assertEqual("migration.immutable", raised.exception.check_id)
+
+    def test_new_untracked_migration_is_allowed(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        context = fixture.context()
+        new_path = "src/main/resources/db/migration/V2__new.sql"
+        (fixture.work / new_path).write_text(
+            "alter table fixture add column name varchar(255);\n",
+            encoding="utf-8",
+        )
+        changed_paths = HARNESS.collect_local_changed_paths(
+            fixture.work,
+            context.merge_base_sha,
+        )
+
+        self.assertIn(new_path, changed_paths)
+        HARNESS.validate_existing_migrations_immutable(
+            fixture.work,
+            context,
+            changed_paths,
+        )
+
+    def test_copied_new_migration_does_not_mutate_unchanged_source(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        context = fixture.context()
+        source_path = "src/main/resources/db/migration/V1__fixture.sql"
+        copied_path = "src/main/resources/db/migration/V2__copied.sql"
+        (fixture.work / copied_path).write_bytes(
+            (fixture.work / source_path).read_bytes()
+        )
+        git(fixture.work, "add", copied_path)
+        changed_paths = HARNESS.collect_local_changed_paths(
+            fixture.work,
+            context.merge_base_sha,
+        )
+
+        self.assertIn(source_path, changed_paths)
+        self.assertIn(copied_path, changed_paths)
+        HARNESS.validate_existing_migrations_immutable(
+            fixture.work,
+            context,
+            changed_paths,
+        )
+
+    def test_migration_validator_rejects_actual_mutation_missing_from_report(
+        self,
+    ) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        context = fixture.context()
+        existing_path = "src/main/resources/db/migration/V1__fixture.sql"
+        (fixture.work / existing_path).write_text(
+            "create table fixture(id varchar(255));\n",
+            encoding="utf-8",
+        )
+
+        with self.assertRaises(HARNESS.HarnessViolation) as raised:
+            HARNESS.validate_existing_migrations_immutable(
+                fixture.work,
+                context,
+                (),
+            )
+
+        self.assertEqual(HARNESS.State.FAIL, raised.exception.state)
+        self.assertEqual("git.diff", raised.exception.check_id)
+
+    def test_migration_base_tree_lookup_failure_is_blocked(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        context = fixture.context(merge_base_sha="f" * 40)
+
+        with self.assertRaises(HARNESS.HarnessViolation) as raised:
+            HARNESS.validate_existing_migrations_immutable(
+                fixture.work,
+                context,
+                ("src/main/resources/db/migration/V2__new.sql",),
+            )
+
+        self.assertEqual(HARNESS.State.BLOCKED, raised.exception.state)
+        self.assertEqual("git.repository", raised.exception.check_id)
+
+    def test_collect_local_changed_paths_includes_every_change_kind(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        context = fixture.context()
+        fixture.create_all_change_kinds()
+
+        changed_paths = HARNESS.collect_local_changed_paths(
+            fixture.work,
+            context.merge_base_sha,
+        )
+
+        self.assertTrue(
+            {
+                "committed.txt",
+                "staged.txt",
+                "tracked.txt",
+                "untracked.txt",
+                "rename-old.txt",
+                "rename-new.txt",
+            }.issubset(changed_paths),
+            changed_paths,
+        )
+
+    def test_collect_local_changed_paths_preserves_staged_copy_source_and_target(
+        self,
+    ) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        context = fixture.context()
+        source_path = "tracked.txt"
+        target_path = "copy.txt"
+        (fixture.work / target_path).write_bytes(
+            (fixture.work / source_path).read_bytes()
+        )
+        git(fixture.work, "add", target_path)
+        raw_copy_status = HARNESS.run_git(
+            fixture.work,
+            "diff",
+            "--cached",
+            "--name-status",
+            "-z",
+            "--find-renames",
+            "--find-copies-harder",
+            "--",
+        )
+
+        changed_paths = HARNESS.collect_local_changed_paths(
+            fixture.work,
+            context.merge_base_sha,
+        )
+
+        self.assertTrue(raw_copy_status.startswith(b"C"), raw_copy_status)
+        self.assertEqual(
+            (source_path, target_path),
+            HARNESS.parse_name_status(raw_copy_status),
+        )
+        self.assertIn(source_path, changed_paths)
+        self.assertIn(target_path, changed_paths)
 
 
 class GitStateTest(unittest.TestCase):
