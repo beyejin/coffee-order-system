@@ -2003,5 +2003,35 @@ class EvaluationTest(unittest.TestCase):
         self.assertEqual("RuntimeError: boom", checks[0].reason)
 
 
+class DocumentationTest(unittest.TestCase):
+    def test_readme_documents_only_supported_commands_and_states(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        readme = (root / "harness/README.md").read_text(encoding="utf-8")
+        agents = (root / "AGENTS.md").read_text(encoding="utf-8")
+        for command in (
+            "python3 scripts/agent-harness.py prepare harness/plans/<issue>.json",
+            "python3 scripts/agent-harness.py evaluate harness/plans/<issue>.json",
+        ):
+            self.assertIn(command, readme)
+        for state in ("PASS", "FAIL", "BLOCKED", "REPLAN_REQUIRED"):
+            self.assertIn(state, readme)
+        self.assertIn("harness/README.md", agents)
+        self.assertNotIn("integrity --ci", readme)
+        self.assertNotIn("evaluate --ci", readme)
+
+    def test_workflow_and_conventions_use_manifest_gate(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        agents = (root / "AGENTS.md").read_text(encoding="utf-8")
+        workflow = (root / "docs/rules/workflow.md").read_text(encoding="utf-8")
+        conventions = (root / "docs/rules/conventions.md").read_text(encoding="utf-8")
+        order = "Plan → Issue → Branch → Manifest → Prepare → Generate → Evaluate → Explain"
+        self.assertIn(order, agents)
+        self.assertIn(order, workflow)
+        self.assertIn("feature|fix|refactor|docs", workflow)
+        self.assertIn("PASS=0", workflow)
+        self.assertIn("기존 Flyway migration은 수정하거나 삭제하지 않는다", conventions)
+        self.assertIn("allowedPaths", conventions)
+
+
 if __name__ == "__main__":
     unittest.main()
