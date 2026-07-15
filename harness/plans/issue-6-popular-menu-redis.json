@@ -80,7 +80,9 @@
     "harness/tests/test_agent_harness.py v1",
     "harness/tests/test_agent_publish.py v1",
     "harness/tests/test_orchestration_policy.py v1",
-    "scripts/agent-harness.py v1"
+    "scripts/agent-harness.py v1",
+    "docs/rules/conventions.md v1",
+    "docs/rules/workflow.md v1"
   ],
   "nonGoals": [
     "인기 검색어 API 추가",
