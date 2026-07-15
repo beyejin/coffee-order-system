@@ -1,0 +1,43 @@
+{
+  "issue": 3,
+  "targetBranch": "main",
+  "objective": "origin/main 기준의 로컬 에이전트 하네스 코어로 계획, 범위, 기준점, 위험, 증거를 fail-closed 판정한다.",
+  "allowedPaths": [
+    "AGENTS.md",
+    "docs/rules/conventions.md",
+    "docs/rules/workflow.md",
+    "docs/superpowers/plans/2026-07-14-agent-harness-core.md",
+    "docs/superpowers/specs/2026-07-14-agent-harness-hard-gate-design.md",
+    "harness/README.md",
+    "harness/plan.example.json",
+    "harness/risk-policy.json",
+    "harness/tests/test_agent_harness.py",
+    "scripts/agent-harness.py"
+  ],
+  "acceptanceCriteria": [
+    "branch issue 번호와 manifest issue가 다르면 REPLAN_REQUIRED다.",
+    "origin/main tip 또는 merge-base가 prepare 이후 바뀌면 REPLAN_REQUIRED다.",
+    "committed, staged, unstaged, untracked, rename의 이전 경로와 새 경로를 모두 검사한다.",
+    "allowedPaths 밖 변경, 미분류 경로, 미선언 위험은 REPLAN_REQUIRED다.",
+    "기존 Flyway migration 수정 또는 삭제는 FAIL이다.",
+    "Docker 또는 Java를 사용할 수 없으면 BLOCKED다.",
+    "현재 plan, base tip, merge-base, HEAD, diff hash에 묶인 evaluation.json을 쓴다."
+  ],
+  "declaredRisks": [
+    "scope",
+    "completion"
+  ],
+  "contractChanges": [
+    "scripts/agent-harness.py v1",
+    "harness/README.md v1",
+    "harness/plan.example.json v1",
+    "harness/risk-policy.json v1",
+    "harness/tests/test_agent_harness.py v1"
+  ],
+  "nonGoals": [
+    "GitHub trusted/candidate workflow 추가",
+    "branch protection 설정",
+    "제품 Java 또는 Flyway migration 수정",
+    "도메인 oracle와 mutation benchmark 구현"
+  ]
+}

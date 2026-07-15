@@ -1,0 +1,343 @@
+{
+  "schemaVersion": 1,
+  "knownRisks": [
+    "scope",
+    "architecture",
+    "api",
+    "migration",
+    "transaction",
+    "concurrency",
+    "async",
+    "multi-instance",
+    "completion"
+  ],
+  "rules": [
+    {
+      "id": "harness-core",
+      "patterns": [
+        "harness/README.md",
+        "harness/plan.example.json",
+        "harness/plans/**",
+        "harness/risk-policy.json",
+        "harness/tests/test_agent_harness.py",
+        "scripts/agent-harness.py"
+      ],
+      "risks": [
+        "scope",
+        "completion"
+      ]
+    },
+    {
+      "id": "agent-router",
+      "patterns": [
+        "AGENTS.md"
+      ],
+      "risks": [
+        "completion"
+      ]
+    },
+    {
+      "id": "agent-context",
+      "patterns": [
+        "scripts/AGENTS.md",
+        "src/AGENTS.md",
+        "scripts/check-doc-context.py"
+      ],
+      "risks": [
+        "completion"
+      ]
+    },
+    {
+      "id": "github-review-flow",
+      "patterns": [
+        ".github/pull_request_template.md",
+        ".github/workflows/quality-gate.yml"
+      ],
+      "risks": [
+        "completion"
+      ]
+    },
+    {
+      "id": "project-documents",
+      "patterns": [
+        "README.md",
+        "CLAUDE.md",
+        "docs/**"
+      ],
+      "risks": [
+        "completion"
+      ]
+    },
+    {
+      "id": "api-contract-document",
+      "patterns": [
+        "docs/api-spec.md"
+      ],
+      "risks": [
+        "api"
+      ]
+    },
+    {
+      "id": "table-contract-document",
+      "patterns": [
+        "docs/table-spec.md"
+      ],
+      "risks": [
+        "migration"
+      ]
+    },
+    {
+      "id": "architecture-document",
+      "patterns": [
+        "ARCHITECTURE.md"
+      ],
+      "risks": [
+        "architecture"
+      ]
+    },
+    {
+      "id": "application-entry",
+      "patterns": [
+        "src/main/java/com/example/coffee/CoffeeApplication.java"
+      ],
+      "risks": [
+        "architecture",
+        "async"
+      ]
+    },
+    {
+      "id": "legacy-common-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/common/**"
+      ],
+      "risks": [
+        "architecture",
+        "api"
+      ]
+    },
+    {
+      "id": "legacy-menu-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/menu/**"
+      ],
+      "risks": [
+        "architecture",
+        "api",
+        "migration"
+      ]
+    },
+    {
+      "id": "legacy-order-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/order/**"
+      ],
+      "risks": [
+        "architecture",
+        "api",
+        "migration",
+        "transaction",
+        "concurrency",
+        "async"
+      ]
+    },
+    {
+      "id": "legacy-point-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/point/**"
+      ],
+      "risks": [
+        "architecture",
+        "api",
+        "migration",
+        "transaction",
+        "concurrency"
+      ]
+    },
+    {
+      "id": "global-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/global/**"
+      ],
+      "risks": [
+        "architecture",
+        "api"
+      ]
+    },
+    {
+      "id": "menu-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/domain/menu/**"
+      ],
+      "risks": [
+        "architecture",
+        "api",
+        "migration"
+      ]
+    },
+    {
+      "id": "order-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/domain/order/**"
+      ],
+      "risks": [
+        "architecture",
+        "api",
+        "migration",
+        "transaction",
+        "concurrency",
+        "async"
+      ]
+    },
+    {
+      "id": "point-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/domain/point/**"
+      ],
+      "risks": [
+        "architecture",
+        "api",
+        "migration",
+        "transaction",
+        "concurrency"
+      ]
+    },
+    {
+      "id": "ranking-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/domain/ranking/**"
+      ],
+      "risks": [
+        "architecture",
+        "api",
+        "migration"
+      ]
+    },
+    {
+      "id": "user-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/domain/user/**"
+      ],
+      "risks": [
+        "architecture",
+        "migration",
+        "transaction",
+        "concurrency"
+      ]
+    },
+    {
+      "id": "data-platform-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/infra/dataplatform/**"
+      ],
+      "risks": [
+        "architecture",
+        "async"
+      ]
+    },
+    {
+      "id": "flyway-migration",
+      "patterns": [
+        "src/main/resources/db/migration/**"
+      ],
+      "risks": [
+        "migration"
+      ]
+    },
+    {
+      "id": "application-config",
+      "patterns": [
+        "src/main/resources/application.yaml"
+      ],
+      "risks": [
+        "async",
+        "multi-instance"
+      ]
+    },
+    {
+      "id": "application-test",
+      "patterns": [
+        "src/test/**"
+      ],
+      "risks": [
+        "completion"
+      ]
+    },
+    {
+      "id": "build-system",
+      "patterns": [
+        "build.gradle",
+        "settings.gradle",
+        "gradlew",
+        "gradlew.bat",
+        "gradle/**"
+      ],
+      "risks": [
+        "completion"
+      ]
+    },
+    {
+      "id": "multi-instance-runtime",
+      "patterns": [
+        "Dockerfile",
+        "compose.yaml",
+        "nginx/**",
+        "scripts/multi-instance-smoke.sh"
+      ],
+      "risks": [
+        "multi-instance",
+        "completion"
+      ]
+    }
+  ],
+  "protectedPatterns": [
+    "AGENTS.md",
+    "docs/rules/conventions.md",
+    "docs/rules/workflow.md",
+    "scripts/agent-harness.py",
+    "harness/**",
+    ".github/workflows/trusted-harness-gate.yml",
+    ".github/workflows/quality-gate.yml",
+    "harness/contracts/**",
+    "docs/contracts/**"
+  ],
+  "riskChecks": {
+    "scope": [
+      "scope.allowed-paths",
+      "risk.classification",
+      "risk.declaration"
+    ],
+    "architecture": [
+      "oracle.architecture"
+    ],
+    "api": [
+      "oracle.api-contract"
+    ],
+    "migration": [
+      "oracle.migration-fresh",
+      "oracle.migration-upgrade"
+    ],
+    "transaction": [
+      "oracle.transaction"
+    ],
+    "concurrency": [
+      "oracle.cross-domain-concurrency"
+    ],
+    "async": [
+      "oracle.async-isolation"
+    ],
+    "multi-instance": [
+      "oracle.multi-instance"
+    ],
+    "completion": [
+      "harness.unit",
+      "gradle.test"
+    ]
+  },
+  "implementedChecks": [
+    "scope.allowed-paths",
+    "risk.classification",
+    "risk.declaration",
+    "harness.unit",
+    "gradle.test"
+  ]
+}

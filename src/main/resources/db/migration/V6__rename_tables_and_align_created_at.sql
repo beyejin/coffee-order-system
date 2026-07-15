@@ -1,0 +1,8 @@
+RENAME TABLE `menu` TO menus,
+             `user` TO users;
+
+ALTER TABLE users
+    MODIFY created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6);
+
+ALTER TABLE point_history
+    MODIFY created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6);
