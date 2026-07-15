@@ -57,6 +57,8 @@
   "declaredRisks": [
     "scope",
     "architecture",
+    "api",
+    "migration",
     "transaction",
     "concurrency",
     "async",
