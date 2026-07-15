@@ -1,6 +1,6 @@
 # 개발·검증 흐름
 
-기능은 `Plan → Issue → Branch → Manifest → Prepare → Generate → Verify → Commit → Evaluate → Publish → Explain` 순서로 진행합니다. 상태 관리는 이 문서에서, machine-readable 범위는 `harness/plans/{issue}.json`에서, 실제 시도와 증거는 `docs/logs/{기능}.md`에서 관리합니다.
+읽기 전용 질의를 제외하고 저장소를 변경하는 모든 작업은 `Plan → Issue → Branch → Manifest → Prepare → Generate → Verify → Commit → Evaluate → Publish → Explain` 순서로 진행합니다. 상태 관리는 이 문서에서, machine-readable 범위는 `harness/plans/{issue}.json`에서, 실제 시도와 증거는 `docs/logs/{기능}.md`에서 관리합니다.
 
 ## 작업 순서
 
@@ -26,7 +26,7 @@
 ## Issue
 
 - 확정한 Plan, 작업 범위, 완료 조건과 검증 방법을 GitHub 이슈에 기록해 issue 번호를 얻습니다.
-- 이슈 생성 전에는 구현을 시작하지 않으며, 범위가 달라지면 이슈와 Plan을 먼저 검토합니다.
+- 이슈 생성 전에는 저장소 변경을 시작하지 않으며, 범위가 달라지면 이슈와 Plan을 먼저 검토합니다.
 
 ## Branch
 
@@ -36,7 +36,7 @@
 
 ## Manifest
 
-- 제품 파일보다 먼저 `harness/plans/{issue}.json`을 작성합니다.
+- plan 외 저장소 파일보다 먼저 `harness/plans/{issue}.json`을 작성합니다.
 - objective, allowedPaths, acceptanceCriteria, declaredRisks, contractChanges, nonGoals를 기록합니다.
 - 범위나 위험이 바뀌면 manifest를 자동 확대하지 않고 REPLAN_REQUIRED로 돌아갑니다.
 
@@ -51,7 +51,7 @@
 - Plan에 포함된 코드와 테스트만 작성합니다.
 - 해피패스와 주요 예외 테스트를 함께 작성합니다.
 - 다음 기능, 불필요한 인프라, 인접 리팩터링을 선행하지 않습니다.
-- 현재 브랜치가 해당 이슈의 작업 브랜치인지 확인한 뒤 코드를 변경합니다.
+- 현재 브랜치가 해당 이슈의 작업 브랜치인지 확인한 뒤 파일을 변경합니다.
 
 ## Verify
 
@@ -68,6 +68,7 @@
 ## Evaluate
 
 - 최종 커밋 HEAD에서 `python3 scripts/agent-harness.py evaluate harness/plans/{issue}.json`을 실행합니다.
+- evaluate 시작과 종료 시 작업 폴더가 clean하지 않으면 `REPLAN_REQUIRED`의 `git.clean`으로 중단합니다.
 - 상태는 `PASS=0`, `FAIL=1`, `BLOCKED=2`, `REPLAN_REQUIRED=3`입니다.
 - FAIL은 최소 수정 뒤 다시 검증하고, BLOCKED는 환경이나 oracle을 준비하며, REPLAN_REQUIRED는 manifest와 사람의 범위 검토로 돌아갑니다.
 - 현재 base tip·merge-base·HEAD·plan·diff에 연결된 PASS evidence만 완료 근거입니다.
@@ -78,6 +79,8 @@
 
 - 검증된 작업 branch를 `origin`에 tracking push합니다.
 - GitHub issue를 연결한 `main` 대상 Ready for review PR을 만들고 실제 테스트 명령과 결과를 본문에 적습니다.
+- `gh pr view --json url,isDraft,baseRefName,headRefName,headRefOid`로 `url` 존재, `isDraft=false`, `baseRefName=main`, 현재 branch와 `headRefName` 일치, 현재 로컬 HEAD와 `headRefOid` 일치를 확인합니다.
+- `git rev-parse HEAD`와 `git rev-parse origin/$(git branch --show-current)`가 같은지도 확인해 push 누락을 막습니다.
 - Draft PR은 사용자가 명시적으로 요청한 경우에만 사용합니다.
 - 사용자가 명시적으로 `local-only` 또는 push 금지를 요청한 경우에만 Publish를 생략하고, branch·commit과 원격 미게시 상태를 보고합니다.
 - 사용자의 일반 변경 요청은 Commit과 Publish까지 포함합니다. Merge는 별도 요청이 있을 때만 수행합니다.
@@ -94,7 +97,7 @@
 5. 다른 후보 대신 이 전략을 선택한 근거는 무엇인가?
 6. 테스트·SQL·실행 결과로 어떻게 증명했는가?
 
-검증이 끝난 변경은 pull request로만 `main`에 병합합니다. 기본 완료 조건은 현재 HEAD에 연결된 PASS evidence와 Ready for review PR URL입니다. Phase 1A와 Phase 1B bootstrap은 repository owner가 수동 검토하고, Phase 1B canary 뒤에는 required checks를 모두 통과해야 합니다.
+검증이 끝난 변경은 pull request로만 `main`에 병합합니다. 기본 완료 조건은 현재 HEAD에 연결된 PASS evidence와 Ready for review PR URL입니다. issue #4의 일회성 Publish 예외만 [`harness/README.md`](../../harness/README.md)에 따르며, 후속 Phase 1B와 일반 작업은 required checks를 모두 통과해야 합니다.
 
 ## 기능 로그
 

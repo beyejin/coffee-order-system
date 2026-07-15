@@ -9,16 +9,17 @@
 ## 작업 격리와 변경 범위
 
 - 최신 `origin/main`에서 issue 전용 clean worktree와 `(feature|fix|refactor|docs)/{이슈번호}-{lowercase-kebab}` branch를 사용한다.
-- 제품 파일보다 먼저 `harness/plans/{issue}.json`을 작성하고 모든 변경 경로를 좁은 allowedPaths에 연결한다.
+- plan 외 저장소 파일보다 먼저 `harness/plans/{issue}.json`을 작성하고 모든 변경 경로를 좁은 allowedPaths에 연결한다.
 - 선택한 plan 외 dirty 파일이 있으면 prepare하지 않으며 기존 변경을 자동 stash하거나 삭제하지 않는다.
 - 기존 Flyway migration은 수정하거나 삭제하지 않는다. schema 변경은 새 migration과 fresh·upgrade 검증으로 추가한다.
 - harness, contract, 필수 oracle와 workflow 변경은 contractChanges에 선언하고 trust-root 검토를 받는다.
 
 ## 작업 게시와 완료 기준
 
+- 읽기 전용 질의를 제외하고 저장소를 변경하는 모든 작업에 같은 Commit, Evaluate, Publish 흐름을 적용한다.
 - 로컬 `main`에 직접 커밋하거나 병합하지 않는다. 모든 변경은 최신 `origin/main`에서 만든 issue 전용 branch에서 시작한다.
 - 한 작업은 하나의 issue, branch, manifest와 PR로 추적한다.
-- 변경 범위 테스트를 통과한 뒤 커밋하고, 최종 커밋 HEAD에서 하네스를 다시 평가한다.
+- 변경 범위 테스트를 통과한 뒤 커밋하고, clean한 최종 커밋 HEAD에서 하네스를 다시 평가한다.
 - 평가를 통과한 branch를 push하고 `main` 대상 Ready for review PR을 만든 상태를 기본 완료로 본다.
 - Draft PR은 사용자가 명시적으로 요청한 경우에만 사용한다.
 - 사용자가 명시적으로 `local-only` 또는 push 금지를 요청한 경우에만 PR 생성을 생략하고 branch·commit과 원격 미게시 상태를 보고한다.

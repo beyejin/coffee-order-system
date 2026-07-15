@@ -42,21 +42,21 @@
 
 ## 구현 게이트
 
-기능 작업은 `Plan → Issue → Branch → Manifest → Prepare → Generate → Verify → Commit → Evaluate → Publish → Explain` 순서를 따른다.
+읽기 전용 질의를 제외하고 저장소를 변경하는 모든 작업은 `Plan → Issue → Branch → Manifest → Prepare → Generate → Verify → Commit → Evaluate → Publish → Explain` 순서를 따른다.
 
 1. **Plan**: 사용자가 목적·불변식·트랜잭션 경계·예외 케이스·완료 조건을 설명한다. AI는 반례를 찾는다.
-2. **Issue**: 확정한 Plan, 범위, 완료 조건과 검증 방법으로 GitHub 이슈를 생성한다. 이슈가 없으면 코드 변경을 시작하지 않는다.
+2. **Issue**: 확정한 Plan, 범위, 완료 조건과 검증 방법으로 GitHub 이슈를 생성한다. 이슈가 없으면 저장소 변경을 시작하지 않는다.
 3. **Branch**: 최신 `origin/main`에서 이슈 번호를 포함한 branch와 clean worktree를 만든다.
-4. **Manifest**: 제품 파일보다 먼저 `harness/plans/{issue}.json`에 목적·허용 경로·위험·계약 변경·비목표를 고정한다.
+4. **Manifest**: plan 외 저장소 파일보다 먼저 `harness/plans/{issue}.json`에 목적·허용 경로·위험·계약 변경·비목표를 고정한다.
 5. **Prepare**: `python3 scripts/agent-harness.py prepare harness/plans/<issue>.json`이 `PASS`한 뒤에만 생성 작업을 시작한다.
 6. **Generate**: manifest의 allowedPaths 안에서 확정한 범위의 코드와 테스트만 작성한다.
 7. **Verify**: 변경 범위에 맞는 테스트와 정적 검사를 실제로 실행한다.
 8. **Commit**: 검증된 범위만 명시적으로 stage하고 한국어 Conventional Commit으로 기록한다.
-9. **Evaluate**: 최종 커밋 HEAD에서 실제 MySQL Testcontainers와 하네스 검증을 실행한다.
-10. **Publish**: 작업 branch를 push하고 `main` 대상 Ready for review PR을 생성한다.
+9. **Evaluate**: clean한 최종 커밋 HEAD에서 실제 MySQL Testcontainers와 하네스 검증을 실행한다.
+10. **Publish**: 작업 branch를 push하고 `main` 대상 Ready for review PR을 생성한 뒤 Draft 여부, base, head branch와 head SHA를 확인한다.
 11. **Explain**: 선택 이유, 동시 요청, 실패 시 롤백과 PR 상태를 사용자가 설명할 수 있어야 완료한다.
 
-하네스가 적용되는 작업은 제품 파일 수정 전 `python3 scripts/agent-harness.py prepare harness/plans/<issue>.json`, 최종 커밋 후 `python3 scripts/agent-harness.py evaluate harness/plans/<issue>.json`을 실행한다. 현재 base tip·merge-base·HEAD·plan·diff에 연결된 `PASS` evidence와 Ready for review PR URL이 없으면 기본 작업을 완료했다고 말하지 않는다. 사용자가 명시적으로 `local-only` 또는 push 금지를 요청한 경우에만 Publish를 생략하고 미게시 branch·commit 상태를 보고한다. Draft PR은 사용자가 명시적으로 요청한 경우에만 생성한다. 상세 규칙은 [`harness/README.md`][harness-readme]를 따른다.
+하네스가 적용되는 작업은 plan 외 저장소 변경 전 `python3 scripts/agent-harness.py prepare harness/plans/<issue>.json`, 최종 커밋 후 `python3 scripts/agent-harness.py evaluate harness/plans/<issue>.json`을 실행한다. 현재 base tip·merge-base·HEAD·plan·diff에 연결된 `PASS` evidence와 Ready for review PR URL이 없으면 기본 작업을 완료했다고 말하지 않는다. 사용자가 명시적으로 `local-only` 또는 push 금지를 요청한 경우에만 Publish를 생략하고 미게시 branch·commit 상태를 보고한다. Draft PR은 사용자가 명시적으로 요청한 경우에만 생성한다. 상세 규칙은 [`harness/README.md`][harness-readme]를 따른다.
 
 사용자의 일반 변경 요청은 Commit과 Publish까지 포함한다. Merge는 사용자가 별도로 요청한 경우에만 수행한다.
 

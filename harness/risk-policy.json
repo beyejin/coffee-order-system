@@ -17,6 +17,7 @@
       "patterns": [
         "harness/README.md",
         "harness/plan.example.json",
+        "harness/plans/**",
         "harness/risk-policy.json",
         "harness/tests/test_agent_harness.py",
         "scripts/agent-harness.py"
@@ -289,6 +290,9 @@
     }
   ],
   "protectedPatterns": [
+    "AGENTS.md",
+    "docs/rules/conventions.md",
+    "docs/rules/workflow.md",
     "scripts/agent-harness.py",
     "harness/**",
     ".github/workflows/trusted-harness-gate.yml",

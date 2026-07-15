@@ -58,7 +58,7 @@ def fixture_plan_bytes(issue: int) -> bytes:
         "allowedPaths": ["AGENTS.md"],
         "acceptanceCriteria": ["현재 diff만 판정한다."],
         "declaredRisks": ["completion"],
-        "contractChanges": [],
+        "contractChanges": ["AGENTS.md v1"],
         "nonGoals": ["제품 코드 변경"],
     }
     return json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -124,7 +124,7 @@ def passing_required_checks(
 def make_plan(
     allowed_paths: tuple[str, ...] = ("AGENTS.md",),
     declared_risks: tuple[str, ...] = ("completion",),
-    contract_changes: tuple[str, ...] = (),
+    contract_changes: tuple[str, ...] = ("AGENTS.md v1",),
 ) -> object:
     return HARNESS.Plan(
         issue=123,
@@ -279,6 +279,11 @@ class GitFixture:
         if state is not HARNESS.State.PASS:
             raise AssertionError(f"fixture prepare failed: {state}")
         (self.work / "AGENTS.md").write_text("# changed\n", encoding="utf-8")
+
+    def prepare_scope_only_commit(self) -> None:
+        self.prepare_scope_only_change()
+        git(self.work, "add", "AGENTS.md")
+        git(self.work, "commit", "-m", "candidate change")
 
 
 class StateAndPlanTest(unittest.TestCase):
@@ -675,6 +680,7 @@ class ScopeRiskTest(unittest.TestCase):
         cases = {
             ".github/pull_request_template.md": ("completion",),
             ".github/workflows/quality-gate.yml": ("completion",),
+            "harness/plans/3.json": ("completion", "scope"),
             "src/AGENTS.md": ("completion",),
             "scripts/check-doc-context.py": ("completion",),
             "src/main/java/com/example/coffee/domain/menu/controller/MenuController.java": (
@@ -703,6 +709,27 @@ class ScopeRiskTest(unittest.TestCase):
                 classification = HARNESS.classify_risks((path,), policy)
                 self.assertEqual(expected_risks, classification.detected_risks)
                 self.assertEqual((), classification.unclassified_paths)
+
+    def test_source_policy_protects_publish_contracts(self) -> None:
+        policy = HARNESS.load_risk_policy(SOURCE_POLICY)
+
+        for path in (
+            "AGENTS.md",
+            "docs/rules/conventions.md",
+            "docs/rules/workflow.md",
+            "harness/README.md",
+        ):
+            with self.subTest(path=path):
+                with self.assertRaises(HARNESS.HarnessViolation) as raised:
+                    HARNESS.validate_contract_changes(
+                        (path,),
+                        make_plan(contract_changes=()),
+                        policy,
+                    )
+                self.assertEqual(
+                    "trust-root.contract",
+                    raised.exception.check_id,
+                )
 
     def test_unclassified_path_requires_replan_before_declaration_check(self) -> None:
         classification = HARNESS.classify_risks(
@@ -1448,6 +1475,8 @@ class EvaluationTest(unittest.TestCase):
         fixture = GitFixture()
         self.addCleanup(fixture.close)
         fixture.prepare_and_add_outside_path()
+        git(fixture.work, "add", "outside.md")
+        git(fixture.work, "commit", "-m", "outside change")
         runner_called = False
 
         def should_not_run(_root: Path, _check_ids: tuple[str, ...]) -> tuple[object, ...]:
@@ -1469,10 +1498,69 @@ class EvaluationTest(unittest.TestCase):
         self.assertIn("outside.md", payload["changedPaths"])
         self.assertRegex(payload["diffHash"], r"^[0-9a-f]{64}$")
 
+    def test_evaluate_dirty_start_requires_replan(self) -> None:
+        for change_kind in ("unstaged", "staged", "untracked"):
+            with self.subTest(change_kind=change_kind):
+                fixture = GitFixture()
+                self.addCleanup(fixture.close)
+                state, _checks = HARNESS.prepare(
+                    fixture.work,
+                    fixture.plan(),
+                    preflight=passing_preflight,
+                )
+                self.assertEqual(HARNESS.State.PASS, state)
+                if change_kind == "untracked":
+                    (fixture.work / "scratch.txt").write_text(
+                        "scratch\n",
+                        encoding="utf-8",
+                    )
+                else:
+                    (fixture.work / "AGENTS.md").write_text(
+                        "# changed\n",
+                        encoding="utf-8",
+                    )
+                    if change_kind == "staged":
+                        git(fixture.work, "add", "AGENTS.md")
+                runner_called = False
+
+                def should_not_run(
+                    _root: Path,
+                    _check_ids: tuple[str, ...],
+                ) -> tuple[object, ...]:
+                    nonlocal runner_called
+                    runner_called = True
+                    return ()
+
+                evaluation = HARNESS.evaluate(
+                    fixture.work,
+                    fixture.plan(),
+                    check_runner=should_not_run,
+                )
+                evidence = json.loads(
+                    (
+                        fixture.work / "build" / "harness" / "evaluation.json"
+                    ).read_text(encoding="utf-8")
+                )
+
+                self.assertFalse(runner_called)
+                self.assertEqual(HARNESS.State.REPLAN_REQUIRED, evaluation.state)
+                self.assertTrue(
+                    any(
+                        check.check_id == "git.clean"
+                        and check.state is HARNESS.State.REPLAN_REQUIRED
+                        for check in evaluation.checks
+                    ),
+                    evaluation.checks,
+                )
+                self.assertTrue(
+                    any(check["id"] == "git.clean" for check in evidence["checks"]),
+                    evidence,
+                )
+
     def test_passing_evaluation_serializes_complete_identity(self) -> None:
         fixture = GitFixture()
         self.addCleanup(fixture.close)
-        fixture.prepare_scope_only_change()
+        fixture.prepare_scope_only_commit()
 
         evaluation = HARNESS.evaluate(
             fixture.work,
@@ -1526,12 +1614,13 @@ class EvaluationTest(unittest.TestCase):
     def test_runner_committing_same_diff_requires_replan(self) -> None:
         fixture = GitFixture()
         self.addCleanup(fixture.close)
-        fixture.prepare_scope_only_change()
+        fixture.prepare_scope_only_commit()
 
         def committing_runner(
             root: Path,
             check_ids: tuple[str, ...],
         ) -> tuple[object, ...]:
+            (root / "AGENTS.md").write_text("# runner changed\n", encoding="utf-8")
             git(root, "add", "AGENTS.md")
             git(root, "commit", "-m", "runner changed HEAD")
             return passing_required_checks(root, check_ids)
@@ -1550,6 +1639,34 @@ class EvaluationTest(unittest.TestCase):
         self.assertEqual(HARNESS.State.REPLAN_REQUIRED, freshness[0].state)
         self.assertIn("HEAD", freshness[0].reason)
 
+    def test_evaluate_runner_leaving_dirty_tree_requires_replan(self) -> None:
+        fixture = GitFixture()
+        self.addCleanup(fixture.close)
+        fixture.prepare_scope_only_commit()
+
+        def dirty_runner(
+            root: Path,
+            check_ids: tuple[str, ...],
+        ) -> tuple[object, ...]:
+            (root / "AGENTS.md").write_text("# dirty runner\n", encoding="utf-8")
+            return passing_required_checks(root, check_ids)
+
+        evaluation = HARNESS.evaluate(
+            fixture.work,
+            fixture.plan(),
+            check_runner=dirty_runner,
+        )
+
+        self.assertEqual(HARNESS.State.REPLAN_REQUIRED, evaluation.state)
+        self.assertTrue(
+            any(
+                check.check_id == "git.clean"
+                and check.state is HARNESS.State.REPLAN_REQUIRED
+                for check in evaluation.checks
+            ),
+            evaluation.checks,
+        )
+
     def test_check_runner_results_are_validated_fail_closed(self) -> None:
         cases = ("empty", "missing", "duplicate", "extra", "non-check-result")
 
@@ -1557,7 +1674,7 @@ class EvaluationTest(unittest.TestCase):
             with self.subTest(malformed=malformed):
                 fixture = GitFixture()
                 self.addCleanup(fixture.close)
-                fixture.prepare_scope_only_change()
+                fixture.prepare_scope_only_commit()
 
                 def malformed_runner(
                     _root: Path,
@@ -1615,7 +1732,7 @@ class EvaluationTest(unittest.TestCase):
     def test_gradle_result_without_preflight_results_fails_closed(self) -> None:
         fixture = GitFixture()
         self.addCleanup(fixture.close)
-        fixture.prepare_scope_only_change()
+        fixture.prepare_scope_only_commit()
 
         def requested_only_runner(
             _root: Path,
@@ -1658,12 +1775,13 @@ class EvaluationTest(unittest.TestCase):
     def test_runner_exception_after_commit_still_records_replan_freshness(self) -> None:
         fixture = GitFixture()
         self.addCleanup(fixture.close)
-        fixture.prepare_scope_only_change()
+        fixture.prepare_scope_only_commit()
 
         def committing_then_failing(
             root: Path,
             _check_ids: tuple[str, ...],
         ) -> tuple[object, ...]:
+            (root / "AGENTS.md").write_text("# runner changed\n", encoding="utf-8")
             git(root, "add", "AGENTS.md")
             git(root, "commit", "-m", "runner changed HEAD before failure")
             raise RuntimeError("runner exploded")
@@ -1706,7 +1824,7 @@ class EvaluationTest(unittest.TestCase):
             with self.subTest(parent_component=parent_component):
                 fixture = GitFixture()
                 self.addCleanup(fixture.close)
-                fixture.prepare_scope_only_change()
+                fixture.prepare_scope_only_commit()
                 outside = fixture.base / f"outside-{parent_component}"
                 sentinel_bytes = b"external sentinel\n"
 
@@ -1741,7 +1859,7 @@ class EvaluationTest(unittest.TestCase):
     def test_evaluate_rechecks_evidence_parent_after_runner(self) -> None:
         fixture = GitFixture()
         self.addCleanup(fixture.close)
-        fixture.prepare_scope_only_change()
+        fixture.prepare_scope_only_commit()
         outside = fixture.base / "outside-swap"
         outside.mkdir()
         sentinel = outside / "evaluation.json"
@@ -1774,7 +1892,7 @@ class EvaluationTest(unittest.TestCase):
     def test_evaluate_restores_validated_plan_lock_removed_by_clean_check(self) -> None:
         fixture = GitFixture()
         self.addCleanup(fixture.close)
-        fixture.prepare_scope_only_change()
+        fixture.prepare_scope_only_commit()
         lock_path = fixture.work / "build" / "harness" / "plan.lock.json"
         expected_lock = json.loads(lock_path.read_text(encoding="utf-8"))
 
@@ -1808,7 +1926,7 @@ class EvaluationTest(unittest.TestCase):
     def test_evaluate_does_not_restore_stale_lock_after_plan_drift(self) -> None:
         fixture = GitFixture()
         self.addCleanup(fixture.close)
-        fixture.prepare_scope_only_change()
+        fixture.prepare_scope_only_commit()
         lock_path = fixture.work / "build" / "harness" / "plan.lock.json"
 
         def cleaning_and_drifting_runner(
@@ -2105,7 +2223,53 @@ class DocumentationTest(unittest.TestCase):
             self.assertIn("Ready for review PR", document)
             self.assertIn("local-only", document)
             self.assertIn("일반 변경 요청은 Commit과 Publish까지 포함", document)
+            self.assertIn(
+                "Draft PR은 사용자가 명시적으로 요청한 경우에만",
+                document,
+            )
+            self.assertIn(
+                "읽기 전용 질의를 제외하고 저장소를 변경하는 모든 작업",
+                document,
+            )
+            self.assertIn("plan 외 저장소 파일보다 먼저", document)
         self.assertIn("로컬 `main`에 직접 커밋하거나 병합하지 않는다", conventions)
+        self.assertIn("이슈가 없으면 저장소 변경을 시작하지 않는다", agents)
+        self.assertIn("이슈 생성 전에는 저장소 변경을 시작하지 않으며", workflow)
+
+    def test_publish_contract_requires_ready_pr_identity_and_limits_bootstrap(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / "docs/rules/workflow.md").read_text(encoding="utf-8")
+        readme = (root / "harness/README.md").read_text(encoding="utf-8")
+        verification = (
+            "gh pr view --json "
+            "url,isDraft,baseRefName,headRefName,headRefOid"
+        )
+
+        for document in (workflow, readme):
+            self.assertIn(verification, document)
+            self.assertIn("isDraft=false", document)
+            self.assertIn("baseRefName=main", document)
+            self.assertIn("headRefOid", document)
+            self.assertIn(
+                "git rev-parse origin/$(git branch --show-current)",
+                document,
+            )
+        self.assertIn("모든 비-`oracle.*` check가 PASS", readme)
+        for required_check in (
+            "scope.allowed-paths",
+            "risk.classification",
+            "risk.declaration",
+            "trust-root.contract",
+            "harness.unit",
+            "gradle.test",
+            "evidence.freshness",
+        ):
+            self.assertIn(required_check, readme)
+        self.assertIn("FAIL과 REPLAN_REQUIRED가 없을 때만", readme)
+        self.assertIn("하네스 PASS나 작업 완료를 뜻하지 않으며", readme)
+        self.assertIn("issue #4 PR merge와 동시에 만료", readme)
+        self.assertNotIn("두 bootstrap PR 전체", readme)
+        self.assertNotIn("Phase 1A와 Phase 1B bootstrap", workflow)
 
 
 if __name__ == "__main__":

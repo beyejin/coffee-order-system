@@ -1741,6 +1741,17 @@ def validate_prepare_clean_state(root: Path, plan: Plan) -> None:
         )
 
 
+def validate_evaluate_clean_state(root: Path, phase: str) -> None:
+    dirty_paths = collect_worktree_paths(root)
+    if dirty_paths:
+        rendered_paths = ", ".join(repr(path) for path in dirty_paths)
+        raise _violation(
+            State.REPLAN_REQUIRED,
+            "git.clean",
+            f"evaluate {phase} worktree가 clean하지 않습니다: {rendered_paths}",
+        )
+
+
 def prepare(
     root: Path,
     plan_path: Path,
@@ -1799,6 +1810,7 @@ def _freshness_check(
     initial_diff_hash: str,
 ) -> tuple[CheckResult, Plan | None, GitContext | None]:
     try:
+        validate_evaluate_clean_state(root, "종료")
         current_policy = load_risk_policy(root / "harness" / "risk-policy.json")
         current_plan = load_plan(root, plan_path, current_policy)
         current_context = resolve_local_git_context(root, current_plan)
@@ -1812,6 +1824,12 @@ def _freshness_check(
             current_changed_paths,
         )
     except HarnessViolation as error:
+        if error.check_id == "git.clean":
+            return (
+                CheckResult(error.check_id, error.state, error.reason),
+                None,
+                None,
+            )
         plan_identity_checks = {
             "plan.path",
             "plan.schema",
@@ -1870,7 +1888,7 @@ def _freshness_check(
         CheckResult(
             "evidence.freshness",
             State.PASS,
-            "plan, base tip, merge-base, HEAD, paths, diff hash가 유지되었습니다.",
+            "worktree가 clean하고 plan, base tip, merge-base, HEAD, paths, diff hash가 유지되었습니다.",
         ),
         current_plan,
         current_context,
@@ -1961,6 +1979,7 @@ def evaluate(
         )
 
     try:
+        validate_evaluate_clean_state(resolved_root, "시작")
         policy = load_risk_policy(resolved_root / "harness" / "risk-policy.json")
         plan = load_plan(resolved_root, plan_path, policy)
         context = resolve_local_git_context(resolved_root, plan)
