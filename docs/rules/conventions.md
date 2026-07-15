@@ -9,7 +9,7 @@
 ## 작업 격리와 변경 범위
 
 - 최신 `origin/main`에서 issue 전용 clean worktree와 `(feature|fix|refactor|docs)/{이슈번호}-{lowercase-kebab}` branch를 사용한다.
-- plan 외 저장소 파일보다 먼저 `harness/plans/{issue}.json`을 작성하고 모든 변경 경로를 좁은 allowedPaths에 연결한다.
+- plan 외 저장소 파일보다 먼저 `harness/plans/issue-{issue}-<slug>.json`을 작성하고 모든 변경 경로를 좁은 allowedPaths에 연결한다. 기존 `harness/plans/{issue}.json`은 하위 호환으로 읽는다.
 - 선택한 plan 외 dirty 파일이 있으면 prepare하지 않으며 기존 변경을 자동 stash하거나 삭제하지 않는다.
 - 기존 Flyway migration은 수정하거나 삭제하지 않는다. schema 변경은 새 migration과 fresh·upgrade 검증으로 추가한다.
 - harness, contract, 필수 oracle와 workflow 변경은 contractChanges에 선언하고 trust-root 검토를 받는다.

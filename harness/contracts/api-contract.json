@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "documentation": "docs/api-spec.md",
+  "controllersRoot": "src/main/java",
+  "responseWrapper": {
+    "success": "boolean",
+    "data": "object-or-array-or-null",
+    "error": "object-or-null"
+  },
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/menus",
+      "controller": "MenuController"
+    },
+    {
+      "method": "POST",
+      "path": "/users/{userId}/points/charge",
+      "controller": "PointController"
+    },
+    {
+      "method": "POST",
+      "path": "/orders",
+      "controller": "OrderController"
+    },
+    {
+      "method": "GET",
+      "path": "/menus/popular",
+      "controller": "PopularMenuController"
+    }
+  ],
+  "errorCodes": {
+    "MENU_NOT_FOUND": 404,
+    "USER_NOT_FOUND": 404,
+    "INSUFFICIENT_POINT": 409,
+    "INVALID_CHARGE_AMOUNT": 400,
+    "POINT_BALANCE_OVERFLOW": 409,
+    "VALIDATION_ERROR": 400
+  }
+}

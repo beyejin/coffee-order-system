@@ -196,7 +196,7 @@
         "rel": "scripts",
         "code_files": 1,
         "has_context": true,
-        "context_file": "/Users/han-yejin/IdeaProjects/coffee-order-system/scripts/AGENTS.md",
+        "context_file": "/Users/han-yejin/IdeaProjects/coffee-order-system/AGENTS.md",
         "context_kind": "AGENTS.md"
       },
       {
@@ -204,7 +204,7 @@
         "rel": "src",
         "code_files": 50,
         "has_context": true,
-        "context_file": "/Users/han-yejin/IdeaProjects/coffee-order-system/src/AGENTS.md",
+        "context_file": "/Users/han-yejin/IdeaProjects/coffee-order-system/AGENTS.md",
         "context_kind": "AGENTS.md"
       }
     ],
@@ -223,7 +223,7 @@
       "C": {
         "auto_score": 0,
         "adjusted_score": 16,
-        "reason": "ARCHITECTURE.md와 src/AGENTS.md가 모듈 책임, 변경 경로, 비자명한 트랜잭션 규칙, cross-module dependency를 외부화한다. 정식 ADR/decision store는 아직 없다."
+        "reason": "docs/context-map.md와 AGENTS.md가 모듈 책임, 변경 경로, 비자명한 트랜잭션 규칙, cross-module dependency를 외부화한다. 정식 ADR/decision store는 아직 없다."
       },
       "E": {
         "auto_score": 8,
@@ -239,7 +239,7 @@
     "reference_validation": {
       "command": "python3 scripts/check-doc-context.py",
       "markdown_links": "PASS",
-      "src_context_coverage": "100%",
+      "source_context_coverage": "100%",
       "scorer_path_refs_total": 57,
       "scorer_flagged": 2,
       "actual_broken_refs": 0,
@@ -257,9 +257,9 @@
       "result": "BUILD SUCCESSFUL"
     },
     "strengths": [
-      "src와 scripts 두 핵심 모듈 모두 AGENTS.md를 보유해 자동 navigation coverage 15/15를 달성했다.",
-      "src/AGENTS.md의 Java 경로가 실제 클릭 가능한 상대링크로 교정됐다.",
-      "ARCHITECTURE.md가 주문, 포인트, 랭킹, AFTER_COMMIT 외부 전송의 의존성과 회귀 범위를 시각화한다.",
+      "루트 AGENTS.md 하나가 src와 scripts 두 핵심 모듈의 진입점을 안내해 자동 navigation coverage 15/15를 달성했다.",
+      "루트 AGENTS.md의 Java·스크립트 경로가 실제 클릭 가능한 상대링크로 정리됐다.",
+      "docs/context-map.md가 주문, 포인트, 랭킹, AFTER_COMMIT 외부 전송의 의존성과 회귀 범위를 시각화한다.",
       "PR template와 GitHub Actions가 문서 검사 및 MySQL Testcontainers 전체 테스트를 자동 게이트로 실행한다.",
       "대표 agent task 3종의 pass-rate 3/3과 추가 개입 0회를 기록했다."
     ],

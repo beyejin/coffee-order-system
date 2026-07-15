@@ -1,4 +1,4 @@
-package com.example.coffee.domain.ranking.repository;
+package com.example.coffee.domain.order.repository;
 
 public interface PopularMenuProjection {
 

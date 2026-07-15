@@ -1,6 +1,6 @@
 package com.example.coffee.domain.ranking.dto;
 
-import com.example.coffee.domain.ranking.repository.PopularMenuProjection;
+import com.example.coffee.domain.order.repository.PopularMenuProjection;
 
 public record PopularMenuResponse(Long menuId, String name, Long orderCount) {
 

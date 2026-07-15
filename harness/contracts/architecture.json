@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "src/main/java",
+  "forbiddenImports": [
+    {
+      "from": "domain.order",
+      "to": "domain.ranking"
+    },
+    {
+      "from": "domain.order",
+      "to": "infra"
+    },
+    {
+      "from": "global",
+      "to": "domain"
+    },
+    {
+      "from": "global",
+      "to": "infra"
+    }
+  ]
+}

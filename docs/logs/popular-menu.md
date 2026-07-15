@@ -6,7 +6,7 @@
 - 이름: 응답에는 현재 `menu.name`을 사용한다.
 - 검증: 시작 경계 포함, 종료 경계 제외, 오래된 주문 제외, 동률, top 3, 빈 결과와 3개 미만 결과를 MySQL 통합 테스트로 확인한다.
 - 성능 증거: `(created_at, menu_id)` 인덱스 컬럼 순서를 `SHOW INDEX`로 확인하고 실제 집계 SQL의 `EXPLAIN` 결과를 기록한다. 소량 데이터에서 특정 key 선택은 강제하지 않는다.
-- 범위 제외: 캐시, Redis, 사전 집계 테이블은 추가하지 않는다.
+- Redis 적용 계획: MySQL을 정본으로 유지하고, 주문 커밋 후 menu별 Redis ZSET에 주문 시각을 저장해 최근 7일 count read model로 사용한다. Redis 오류 시 기존 MySQL 집계로 fallback한다.
 
 ## Attempt 1 — 2026-07-12 ✅ PASS
 - 결과: `./gradlew clean test --console plain` 성공, 기존 메뉴·포인트·주문 회귀를 포함한 전체 27개 테스트가 통과했다.
@@ -31,3 +31,12 @@
 - V5 전제: 아직 배포 전이고 영속 주문 데이터가 없는 현재 환경에서 컬럼 정밀도와 기본값만 정렬하며 데이터 변환은 수행하지 않는다.
 - 기존 데이터 환경: V3로 저장된 주문이 있다면 당시 DB session timezone을 먼저 확인하고 검증된 별도 `CONVERT_TZ` 마이그레이션을 설계해야 한다. 시간대를 임의 추정해 변환하거나 데이터를 삭제하지 않으며, 이 절차 없이 V5를 적용하면 안 된다.
 - 검증: fresh database에서 V1부터 V5까지 전체 Flyway migration과 전체 테스트를 다시 실행한다.
+
+## Redis ZSET Attempt 1 — 2026-07-15 ✅ PASS
+- read model: 성공한 주문의 `AFTER_COMMIT` 이벤트에서 `popular:menus:{menuId}:orders` ZSET에 주문 ID를 member로 저장하고, UTC epoch microsecond를 score로 저장한다. MySQL 주문 원장은 그대로 정본이다.
+- 기간: 메뉴별 `ZCOUNT`에 `[to - 7일, to)`를 적용해 시작 경계 포함·종료 경계 제외를 유지한다. 결과는 주문 수 내림차순, menu ID 오름차순으로 최대 3개를 반환한다.
+- 장애: Redis 조회 실패 또는 read model stale 감지 시 기존 MySQL `GROUP BY` 집계로 fallback한다. 포인트·주문 트랜잭션은 Redis 장애 때문에 롤백하지 않는다.
+- cold start: Redis가 비어 있고 MySQL에 기존 주문만 있는 경우에도 MySQL 집계로 보완해 배포 직후 빈 인기 목록을 반환하지 않는다.
+- 검증: `./gradlew clean test --console plain` 성공, 전체 38개 테스트가 통과했다. Redis Testcontainers 통합 4개와 기존 인기 메뉴 MySQL 회귀 6개를 포함한다.
+- 실패 주문: 포인트 부족 주문은 Redis ZSET에 반영되지 않는다. 커밋 전 주문 INSERT 실패에서는 `AFTER_COMMIT` 랭킹 리스너가 실행되지 않는다.
+- 배운 점: 단순 누적 `ZINCRBY`는 최근 7일의 부분 경계를 표현하기 어렵다. 주문 시각을 score로 저장한 menu별 ZSET이 현재 과제의 정확성 계약에 더 직접적으로 맞는다.

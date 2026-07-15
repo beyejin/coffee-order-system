@@ -198,6 +198,12 @@ PLAN_LOCK_FIELDS = frozenset(
 BRANCH_PATTERN = re.compile(
     r"^(feature|fix|refactor|docs)/([1-9][0-9]*)-([a-z0-9]+(?:-[a-z0-9]+)*)$"
 )
+LEGACY_PLAN_PATH_PATTERN = re.compile(
+    r"^harness/plans/([1-9][0-9]*)\.json$"
+)
+READABLE_PLAN_PATH_PATTERN = re.compile(
+    r"^harness/plans/issue-([1-9][0-9]*)-[a-z0-9]+(?:-[a-z0-9]+)*\.json$"
+)
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 PLAN_HASH_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 REQUIRED_PREFLIGHT_CHECK_IDS = frozenset(
@@ -229,6 +235,19 @@ GRADLE_TEST_COMMAND = ("./gradlew", "clean", "test", "--console", "plain")
 INLINE_CHECK_IDS = frozenset(
     {"scope.allowed-paths", "risk.classification", "risk.declaration"}
 )
+DOMAIN_ORACLE_CHECK_IDS = frozenset(
+    {
+        "oracle.architecture",
+        "oracle.api-contract",
+        "oracle.migration-fresh",
+        "oracle.migration-upgrade",
+        "oracle.transaction",
+        "oracle.cross-domain-concurrency",
+        "oracle.async-isolation",
+        "oracle.multi-instance",
+    }
+)
+ORACLE_SCRIPT_PATH = "scripts/harness-oracles.py"
 
 
 class _DuplicateJsonKey(ValueError):
@@ -321,6 +340,14 @@ def validate_plan_pattern(pattern: str) -> None:
             f"광범위한 allowedPaths pattern은 허용되지 않습니다: {pattern}",
         )
     _validate_repository_pattern(pattern, "plan.schema")
+
+
+def plan_path_matches_issue(relative_path: str, issue: int) -> bool:
+    for pattern in (LEGACY_PLAN_PATH_PATTERN, READABLE_PLAN_PATH_PATTERN):
+        match = pattern.fullmatch(relative_path)
+        if match is not None:
+            return int(match.group(1)) == issue
+    return False
 
 
 def _validate_repository_pattern(pattern: str, check_id: str) -> None:
@@ -419,12 +446,12 @@ def parse_plan(
             "targetBranch는 main이어야 합니다.",
         )
 
-    expected_path = f"harness/plans/{issue}.json"
-    if relative_path != expected_path:
+    if not plan_path_matches_issue(relative_path, issue):
         raise _violation(
             State.FAIL,
             "plan.path",
-            f"plan 경로는 {expected_path}여야 합니다.",
+            "plan 경로는 harness/plans/{issue}.json 또는 "
+            "harness/plans/issue-{issue}-<slug>.json이어야 합니다.",
         )
 
     objective = _non_empty_string(payload["objective"], "objective")
@@ -597,6 +624,17 @@ def load_risk_policy(path: Path) -> RiskPolicy:
         raise policy_error(
             "implementedChecks에 riskChecks에 없는 값이 있습니다: "
             f"{sorted(unknown_implemented_checks)}"
+        )
+    runtime_check_ids = (
+        set(INLINE_CHECK_IDS)
+        | {"harness.unit", "gradle.test"}
+        | set(DOMAIN_ORACLE_CHECK_IDS)
+    )
+    unsupported_runtime_checks = set(implemented_check_values) - runtime_check_ids
+    if unsupported_runtime_checks:
+        raise policy_error(
+            "implementedChecks에 실행기가 없는 값이 있습니다: "
+            f"{sorted(unsupported_runtime_checks)}"
         )
 
     return RiskPolicy(
@@ -1325,9 +1363,10 @@ def load_plan_lock(path: Path) -> PlanLock:
     base_tip_sha = _lock_string(payload["baseTipSha"], "baseTipSha")
     merge_base_sha = _lock_string(payload["mergeBaseSha"], "mergeBaseSha")
 
-    if plan_path != f"harness/plans/{issue}.json":
+    if not plan_path_matches_issue(plan_path, issue):
         raise _plan_lock_error(
-            f"planPath는 harness/plans/{issue}.json이어야 합니다."
+            "planPath는 harness/plans/{issue}.json 또는 "
+            "harness/plans/issue-{issue}-<slug>.json이어야 합니다."
         )
     if target_branch != "main":
         raise _plan_lock_error("targetBranch는 main이어야 합니다.")
@@ -1573,7 +1612,7 @@ def execute_command(
     if result.returncode == 0:
         state = State.PASS
     elif (
-        check_id == "gradle.test"
+        (check_id == "gradle.test" or check_id.startswith("oracle."))
         and "Could not find a valid Docker environment" in full_output
     ):
         state = State.BLOCKED
@@ -1631,12 +1670,25 @@ def run_required_checks(
                         GRADLE_TEST_COMMAND,
                     )
                 )
+        elif check_id in DOMAIN_ORACLE_CHECK_IDS:
+            checks.append(
+                execute_command(
+                    root,
+                    check_id,
+                    (
+                        sys.executable,
+                        ORACLE_SCRIPT_PATH,
+                        root.as_posix(),
+                        check_id,
+                    ),
+                )
+            )
         else:
             checks.append(
                 CheckResult(
                     check_id,
                     State.BLOCKED,
-                    "아직 구현되지 않은 필수 oracle입니다.",
+                    "구현되지 않은 필수 check입니다.",
                 )
             )
     return tuple(checks)
