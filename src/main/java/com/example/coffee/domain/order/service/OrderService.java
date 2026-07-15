@@ -63,7 +63,7 @@ public class OrderService {
 		);
 		Order order = orderRepository.save(Order.create(user, menu, price, orderedAt));
 
-		eventPublisher.publishEvent(new OrderPaidEvent(userId, menuId, price));
+		eventPublisher.publishEvent(new OrderPaidEvent(order.getId(), userId, menuId, price, orderedAt));
 
 		return new OrderResponse(order.getId(), userId, menuId, price, user.getBalance());
 	}

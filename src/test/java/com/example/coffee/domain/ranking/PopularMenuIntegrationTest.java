@@ -31,10 +31,17 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.context.TestPropertySource;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, PopularMenuIntegrationTest.FixedClockConfiguration.class})
+@TestPropertySource(properties = {
+		"spring.data.redis.host=127.0.0.1",
+		"spring.data.redis.port=1",
+		"spring.data.redis.connect-timeout=100ms",
+		"spring.data.redis.timeout=100ms"
+})
 class PopularMenuIntegrationTest {
 
 	private static final Instant FIXED_INSTANT = Instant.parse("2026-07-12T00:00:00.123456Z");

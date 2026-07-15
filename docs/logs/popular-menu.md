@@ -31,3 +31,11 @@
 - V5 전제: 아직 배포 전이고 영속 주문 데이터가 없는 현재 환경에서 컬럼 정밀도와 기본값만 정렬하며 데이터 변환은 수행하지 않는다.
 - 기존 데이터 환경: V3로 저장된 주문이 있다면 당시 DB session timezone을 먼저 확인하고 검증된 별도 `CONVERT_TZ` 마이그레이션을 설계해야 한다. 시간대를 임의 추정해 변환하거나 데이터를 삭제하지 않으며, 이 절차 없이 V5를 적용하면 안 된다.
 - 검증: fresh database에서 V1부터 V5까지 전체 Flyway migration과 전체 테스트를 다시 실행한다.
+
+## Redis ZSET Attempt 1 — 2026-07-15 ✅ PASS
+- read model: 성공한 주문의 `AFTER_COMMIT` 이벤트에서 `popular:menus:{menuId}:orders` ZSET에 주문 ID를 member로 저장하고, UTC epoch microsecond를 score로 저장한다. MySQL 주문 원장은 그대로 정본이다.
+- 기간: 메뉴별 `ZCOUNT`에 `[to - 7일, to)`를 적용해 시작 경계 포함·종료 경계 제외를 유지한다. 결과는 주문 수 내림차순, menu ID 오름차순으로 최대 3개를 반환한다.
+- 장애: Redis 조회 실패 또는 read model stale 감지 시 기존 MySQL `GROUP BY` 집계로 fallback한다. 포인트·주문 트랜잭션은 Redis 장애 때문에 롤백하지 않는다.
+- 검증: `./gradlew clean test --console plain` 성공, 전체 37개 테스트가 통과했다. Redis Testcontainers 통합 3개와 기존 인기 메뉴 MySQL 회귀 6개를 포함한다.
+- 실패 주문: 포인트 부족 주문은 Redis ZSET에 반영되지 않는다. 커밋 전 주문 INSERT 실패에서는 `AFTER_COMMIT` 랭킹 리스너가 실행되지 않는다.
+- 배운 점: 단순 누적 `ZINCRBY`는 최근 7일의 부분 경계를 표현하기 어렵다. 주문 시각을 score로 저장한 menu별 ZSET이 현재 과제의 정확성 계약에 더 직접적으로 맞는다.

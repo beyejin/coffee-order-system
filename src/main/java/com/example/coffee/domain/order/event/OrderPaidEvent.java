@@ -1,4 +1,12 @@
 package com.example.coffee.domain.order.event;
 
-public record OrderPaidEvent(Long userId, Long menuId, Long paymentAmount) {
+import java.time.LocalDateTime;
+
+public record OrderPaidEvent(
+		Long orderId,
+		Long userId,
+		Long menuId,
+		Long paymentAmount,
+		LocalDateTime orderedAt
+) {
 }
