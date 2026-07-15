@@ -19,7 +19,7 @@ trap 'rm -rf "$temp_dir"' EXIT INT TERM
 upstreams_file="${temp_dir}/upstreams.txt"
 
 docker compose exec -T mysql sh -c \
-  'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -N -s -uroot coffee -e "SELECT u.balance, (SELECT COUNT(*) FROM orders), (SELECT COUNT(*) FROM point_history) FROM user u WHERE u.id = 1"' \
+  'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -N -s -uroot coffee -e "SELECT u.balance, (SELECT COUNT(*) FROM orders), (SELECT COUNT(*) FROM point_history) FROM users u WHERE u.id = 1"' \
   > "${temp_dir}/initial-db-state.tsv" || fail "초기 공유 MySQL 상태 조회 실패"
 
 python3 - "$temp_dir/initial-db-state.tsv" <<'PY' || fail "fresh DB가 아닙니다. 고유 COMPOSE_PROJECT_NAME을 사용하거나 docker compose down -v --remove-orphans 후 다시 실행하세요."
@@ -110,7 +110,7 @@ upstream_count="$(sort -u "$upstreams_file" | wc -l | tr -d ' ')"
 [ "$upstream_count" -ge 2 ] || fail "요청이 두 upstream으로 분산되지 않았습니다."
 
 docker compose exec -T mysql sh -c \
-  'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -N -s -uroot coffee -e "SELECT u.balance, (SELECT COUNT(*) FROM orders), (SELECT COUNT(*) FROM point_history) FROM user u WHERE u.id = 1"' \
+  'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -N -s -uroot coffee -e "SELECT u.balance, (SELECT COUNT(*) FROM orders), (SELECT COUNT(*) FROM point_history) FROM users u WHERE u.id = 1"' \
   > "${temp_dir}/db-state.tsv" || fail "공유 MySQL 상태 조회 실패"
 
 python3 - "$temp_dir/db-state.tsv" <<'PY' || fail "공유 DB 상태가 balance=5500, orders=1, history=2가 아닙니다."

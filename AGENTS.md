@@ -16,6 +16,9 @@
 | 작업 | 먼저 읽을 문서 |
 |---|---|
 | 현재 범위와 진행 상태 확인 | [`README.md`](README.md) |
+| 도메인 간 의존성과 데이터 흐름 확인 | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
+| 코드 진입점과 변경 경로 확인 | [`src/AGENTS.md`](src/AGENTS.md) |
+| 검증 스크립트의 목적과 실행 조건 확인 | [`scripts/AGENTS.md`](scripts/AGENTS.md) |
 | 설계 배경과 기술 선택 검토 | [`docs/strategy.md`](docs/strategy.md) |
 | 테이블·컬럼·제약 확인 | [`docs/table-spec.md`](docs/table-spec.md) |
 | API 요청·응답·에러 확인 | [`docs/api-spec.md`](docs/api-spec.md) |
@@ -24,6 +27,16 @@
 | 에이전트 작업 범위·검증 게이트 확인 | [`harness/README.md`][harness-readme] |
 | 문서·커밋 작성 규칙 확인 | [`docs/rules/conventions.md`](docs/rules/conventions.md) |
 | 이전 시도와 실제 검증 결과 확인 | [`docs/logs/`](docs/logs/README.md) |
+| 에이전트 작업 pass-rate 확인 | [`docs/agent-evaluation.md`](docs/agent-evaluation.md) |
+
+## 빠른 검증 명령
+
+| 검증 범위 | 명령 |
+|---|---|
+| 문서 링크·소스 컨텍스트 | `python3 scripts/check-doc-context.py` |
+| Flyway 순차 업그레이드 | `./gradlew test --tests com.example.coffee.MigrationUpgradeTest` |
+| 전체 MySQL Testcontainers 회귀 | `./gradlew test` |
+| 다중 인스턴스 smoke | [`scripts/AGENTS.md`](scripts/AGENTS.md)의 사전 조건 확인 후 `./scripts/multi-instance-smoke.sh` |
 
 [harness-readme]: harness/README.md
 

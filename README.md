@@ -67,7 +67,7 @@ Smoke 자동 검증에는 `curl`, `python3`, Docker Compose가 필요합니다. 
 
 ### 포인트: 현재 잔액과 변경 이력 분리
 
-현재 잔액은 `user.balance`에 저장해 빠르게 조회하고, 충전·사용 내역은 `point_history`에 불변 이력으로 남깁니다. 잔액 변경과 이력 저장은 반드시 같은 트랜잭션에서 처리합니다.
+현재 잔액은 `users.balance`에 저장해 빠르게 조회하고, 충전·사용 내역은 `point_history`에 불변 이력으로 남깁니다. 잔액 변경과 이력 저장은 반드시 같은 트랜잭션에서 처리하며, `User`가 잔액 부족을 직접 방어합니다.
 
 ### 주문: 결제 시점 가격 보존
 
@@ -89,23 +89,23 @@ Smoke 자동 검증에는 `curl`, `python3`, Docker Compose가 필요합니다. 
 
 ```mermaid
 erDiagram
-    USER ||--o{ POINT_HISTORY : has
-    USER ||--o{ ORDERS : places
-    MENU ||--o{ ORDERS : ordered
+    USERS ||--o{ POINT_HISTORY : has
+    USERS ||--o{ ORDERS : places
+    MENUS ||--o{ ORDERS : ordered
 
-    USER {
+    USERS {
         BIGINT id PK
         BIGINT balance
-        DATETIME created_at
+        DATETIME(6) created_at
     }
     POINT_HISTORY {
         BIGINT id PK
         BIGINT user_id FK
         BIGINT amount
         VARCHAR type
-        DATETIME created_at
+        DATETIME(6) created_at
     }
-    MENU {
+    MENUS {
         BIGINT id PK
         VARCHAR name
         BIGINT price

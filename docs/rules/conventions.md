@@ -14,6 +14,13 @@
 - 기존 Flyway migration은 수정하거나 삭제하지 않는다. schema 변경은 새 migration과 fresh·upgrade 검증으로 추가한다.
 - harness, contract, 필수 oracle와 workflow 변경은 contractChanges에 선언하고 trust-root 검토를 받는다.
 
+## 패키지 구조
+
+- `domain/{도메인}` 아래에 `controller`, `dto`, `entity`, `repository`, `service`를 둔다.
+- 전역 설정·예외·공통 응답은 각각 `global/config`, `global/error`, `global/response`에 둔다.
+- 외부 시스템 구현은 `infra/{외부시스템}`에 두고, 도메인 패키지에 인프라 구현을 섞지 않는다.
+- 패키지 이동만을 위한 리팩터링에서는 API 계약, DB 스키마, 비즈니스 로직을 변경하지 않는다.
+
 ## 커밋 메시지
 
 Conventional Commits 형식(`type: 설명`)을 한국어로 작성한다.
