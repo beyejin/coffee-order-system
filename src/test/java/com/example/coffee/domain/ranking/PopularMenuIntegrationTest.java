@@ -39,7 +39,7 @@ class PopularMenuIntegrationTest {
 
 	private static final Instant FIXED_INSTANT = Instant.parse("2026-07-12T00:00:00.123456Z");
 	private static final LocalDateTime TO = LocalDateTime.ofInstant(FIXED_INSTANT, ZoneOffset.UTC);
-	private static final LocalDateTime FROM = TO.minusHours(168);
+	private static final LocalDateTime FROM = TO.minusDays(7);
 
 	@Autowired
 	private MockMvc mockMvc;
@@ -55,10 +55,10 @@ class PopularMenuIntegrationTest {
 		clock.setInstant(FIXED_INSTANT);
 		jdbcTemplate.update("DELETE FROM orders");
 		jdbcTemplate.update("DELETE FROM point_history");
-		jdbcTemplate.update("UPDATE user SET balance = 0 WHERE id = 1");
+		jdbcTemplate.update("UPDATE users SET balance = 0 WHERE id = 1");
 		for (long menuId = 1; menuId <= 5; menuId++) {
 			jdbcTemplate.update("""
-					INSERT INTO menu (id, name, price)
+					INSERT INTO menus (id, name, price)
 					VALUES (?, ?, ?)
 					ON DUPLICATE KEY UPDATE name = VALUES(name), price = VALUES(price)
 					""", menuId, "메뉴" + menuId, 4000L + menuId * 500L);
@@ -71,7 +71,7 @@ class PopularMenuIntegrationTest {
 		insertOrder(1L, TO.minusNanos(1_000));
 		insertOrder(2L, TO);
 		insertOrder(3L, FROM.minusNanos(1_000));
-		jdbcTemplate.update("UPDATE menu SET name = '현재 아메리카노' WHERE id = 1");
+		jdbcTemplate.update("UPDATE menus SET name = '현재 아메리카노' WHERE id = 1");
 
 		mockMvc.perform(get("/menus/popular"))
 				.andExpect(status().isOk())
@@ -85,7 +85,7 @@ class PopularMenuIntegrationTest {
 
 	@Test
 	void 실제_주문_API가_저장한_UTC_microsecond_주문을_인기_구간에서_집계한다() throws Exception {
-		jdbcTemplate.update("UPDATE user SET balance = 10000 WHERE id = 1");
+		jdbcTemplate.update("UPDATE users SET balance = 10000 WHERE id = 1");
 		clock.setInstant(FIXED_INSTANT.minusSeconds(1));
 
 		mockMvc.perform(post("/orders")
@@ -148,7 +148,7 @@ class PopularMenuIntegrationTest {
 				EXPLAIN
 				SELECT m.id AS menuId, m.name AS name, COUNT(o.id) AS orderCount
 				FROM orders o
-				JOIN menu m ON m.id = o.menu_id
+				JOIN menus m ON m.id = o.menu_id
 				WHERE o.created_at >= ? AND o.created_at < ?
 				GROUP BY m.id, m.name
 				ORDER BY orderCount DESC, m.id ASC
@@ -177,7 +177,7 @@ class PopularMenuIntegrationTest {
 	private void insertOrder(long menuId, LocalDateTime createdAt) {
 		jdbcTemplate.update("""
 				INSERT INTO orders (user_id, menu_id, price, created_at)
-				VALUES (1, ?, (SELECT price FROM menu WHERE id = ?), ?)
+				VALUES (1, ?, (SELECT price FROM menus WHERE id = ?), ?)
 				""", menuId, menuId, createdAt);
 	}
 

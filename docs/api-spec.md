@@ -75,7 +75,7 @@
 ```
 
 **실패 케이스**
-- `amount <= 0` → 400 `INVALID_CHARGE_AMOUNT`
+- `amount <= 0` 또는 누락 → 400 `VALIDATION_ERROR`
 - 존재하지 않는 `userId` → 404 `USER_NOT_FOUND`
 - 충전 후 잔액이 BIGINT 범위를 초과 → 409 `POINT_BALANCE_OVERFLOW`
 - 잘못된 JSON, 빈 요청 본문, 소수 충전 금액 → 400 `VALIDATION_ERROR`
@@ -132,9 +132,9 @@
 최근 7일간 주문 횟수 기준 상위 3개 메뉴를 반환합니다.
 
 - 조회 시각 `to`를 UTC 기준으로 한 번 고정하고 DB 정밀도와 같은 microsecond로 절삭합니다.
-- 집계 구간은 `[to - 168시간, to)`입니다. 시작 시각 주문은 포함하고 `to`와 같은 시각의 주문은 제외합니다.
+- 집계 구간은 `[to - 7일, to)`입니다. 시작 시각 주문은 포함하고 `to`와 같은 시각의 주문은 제외합니다.
 - 주문 횟수 내림차순, 동률이면 메뉴 ID 오름차순으로 정렬합니다.
-- 응답 이름은 주문 시점 이름이 아니라 현재 `menu.name`입니다.
+- 응답 이름은 주문 시점 이름이 아니라 현재 `menus.name`입니다.
 - 주문 API도 같은 UTC `Clock`으로 주문 시각을 캡처해 `DATETIME(6)`에 저장합니다.
 
 **Response 200**

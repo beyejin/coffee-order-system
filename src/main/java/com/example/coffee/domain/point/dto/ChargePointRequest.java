@@ -1,4 +1,7 @@
 package com.example.coffee.domain.point.dto;
 
-public record ChargePointRequest(Long amount) {
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+
+public record ChargePointRequest(@NotNull @Positive Long amount) {
 }

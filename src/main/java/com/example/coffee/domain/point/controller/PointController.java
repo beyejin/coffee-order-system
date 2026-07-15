@@ -4,6 +4,7 @@ import com.example.coffee.domain.point.dto.ChargePointRequest;
 import com.example.coffee.domain.point.dto.ChargePointResponse;
 import com.example.coffee.domain.point.service.PointService;
 import com.example.coffee.global.response.ApiResponse;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,7 +24,7 @@ public class PointController {
 	@PostMapping("/charge")
 	public ApiResponse<ChargePointResponse> charge(
 			@PathVariable Long userId,
-			@RequestBody ChargePointRequest request
+			@Valid @RequestBody ChargePointRequest request
 	) {
 		return ApiResponse.success(pointService.charge(userId, request.amount()));
 	}

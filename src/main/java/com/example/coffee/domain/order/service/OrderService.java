@@ -49,20 +49,12 @@ public class OrderService {
 
 	@Transactional
 	public OrderResponse order(Long userId, Long menuId) {
-		if (userId == null || menuId == null) {
-			throw new BusinessException(ErrorCode.VALIDATION_ERROR);
-		}
-
 		Menu menu = menuRepository.findById(menuId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.MENU_NOT_FOUND));
 		User user = userRepository.findByIdForUpdate(userId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
 		long price = menu.getPrice();
-		if (user.getBalance() < price) {
-			throw new BusinessException(ErrorCode.INSUFFICIENT_POINT);
-		}
-
 		user.use(price);
 		pointHistoryRepository.save(PointHistory.use(user, price));
 		LocalDateTime orderedAt = LocalDateTime.ofInstant(

@@ -35,6 +35,8 @@ import com.example.coffee.domain.user.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -84,8 +86,8 @@ class OrderIntegrationTest {
 		dropRejectOrderConstraint();
 		jdbcTemplate.update("DELETE FROM orders");
 		jdbcTemplate.update("DELETE FROM point_history");
-		jdbcTemplate.update("UPDATE user SET balance = 0 WHERE id = ?", USER_ID);
-		jdbcTemplate.update("UPDATE menu SET price = ? WHERE id = ?", MENU_PRICE, MENU_ID);
+		jdbcTemplate.update("UPDATE users SET balance = 0 WHERE id = ?", USER_ID);
+		jdbcTemplate.update("UPDATE menus SET price = ? WHERE id = ?", MENU_PRICE, MENU_ID);
 		dataPlatformClient.reset();
 	}
 
@@ -128,7 +130,7 @@ class OrderIntegrationTest {
 		assertEquals(new OrderDataMessage(USER_ID, MENU_ID, MENU_PRICE), message);
 		assertTrue(dataPlatformClient.wasCommittedOrderVisible());
 
-		jdbcTemplate.update("UPDATE menu SET price = 9999 WHERE id = ?", MENU_ID);
+		jdbcTemplate.update("UPDATE menus SET price = 9999 WHERE id = ?", MENU_ID);
 		assertEquals(MENU_PRICE, jdbcTemplate.queryForObject(
 				"SELECT price FROM orders WHERE user_id = ?", Long.class, USER_ID));
 	}
@@ -148,6 +150,27 @@ class OrderIntegrationTest {
 		assertEquals(4499L, balance());
 		assertNoOrderOrHistory();
 		assertFalse(dataPlatformClient.wasInvoked());
+	}
+
+	@Test
+	void User는_서비스_검사_없이도_잔액보다_큰_사용을_거부한다() {
+		setBalance(1000L);
+		var user = userRepository.findById(USER_ID).orElseThrow();
+
+		BusinessException exception = assertThrows(BusinessException.class, () -> user.use(1001L));
+
+		assertEquals(ErrorCode.INSUFFICIENT_POINT, exception.getErrorCode());
+		assertEquals(1000L, user.getBalance());
+	}
+
+	@ParameterizedTest
+	@ValueSource(longs = {0, -1})
+	void User는_0_이하_사용_금액을_거부한다(long amount) {
+		setBalance(1000L);
+		var user = userRepository.findById(USER_ID).orElseThrow();
+
+		assertThrows(IllegalArgumentException.class, () -> user.use(amount));
+		assertEquals(1000L, user.getBalance());
 	}
 
 	@Test
@@ -289,7 +312,7 @@ class OrderIntegrationTest {
 	}
 
 	private void setBalance(long balance) {
-		jdbcTemplate.update("UPDATE user SET balance = ? WHERE id = ?", balance, USER_ID);
+		jdbcTemplate.update("UPDATE users SET balance = ? WHERE id = ?", balance, USER_ID);
 	}
 
 	private void dropRejectOrderConstraint() {

@@ -66,7 +66,7 @@ class PointChargeIntegrationTest {
 	void resetPointData() {
 		dropRejectPointHistoryConstraint();
 		jdbcTemplate.update("DELETE FROM point_history");
-		jdbcTemplate.update("UPDATE user SET balance = 0 WHERE id = ?", USER_ID);
+		jdbcTemplate.update("UPDATE users SET balance = 0 WHERE id = ?", USER_ID);
 	}
 
 	@AfterEach
@@ -95,6 +95,21 @@ class PointChargeIntegrationTest {
 		assertEquals(PointHistoryType.CHARGE, histories.get(0).getType());
 	}
 
+	@Test
+	void 생성_시각_컬럼은_모두_microsecond_정밀도를_사용한다() {
+		for (String tableName : List.of("users", "point_history", "orders")) {
+			Integer precision = jdbcTemplate.queryForObject("""
+					SELECT datetime_precision
+					FROM information_schema.columns
+					WHERE table_schema = DATABASE()
+					  AND table_name = ?
+					  AND column_name = 'created_at'
+					""", Integer.class, tableName);
+
+			assertEquals(6, precision, tableName + ".created_at 정밀도");
+		}
+	}
+
 	@ParameterizedTest
 	@ValueSource(longs = {0, -1})
 	void 충전_금액이_0_이하면_400을_반환하고_DB를_변경하지_않는다(long amount) throws Exception {
@@ -104,8 +119,7 @@ class PointChargeIntegrationTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.success").value(false))
 				.andExpect(jsonPath("$.data").value(nullValue()))
-				.andExpect(jsonPath("$.error.code").value("INVALID_CHARGE_AMOUNT"))
-				.andExpect(jsonPath("$.error.message").value("충전 금액은 0보다 커야 합니다."));
+				.andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
 
 		assertEquals(0L, userRepository.findById(USER_ID).orElseThrow().getBalance());
 		assertEquals(0, pointHistoryRepository.countByUser_Id(USER_ID));
@@ -119,7 +133,7 @@ class PointChargeIntegrationTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.success").value(false))
 				.andExpect(jsonPath("$.data").value(nullValue()))
-				.andExpect(jsonPath("$.error.code").value("INVALID_CHARGE_AMOUNT"));
+				.andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
 
 		assertEquals(0L, userRepository.findById(USER_ID).orElseThrow().getBalance());
 		assertEquals(0, pointHistoryRepository.countByUser_Id(USER_ID));
@@ -141,7 +155,7 @@ class PointChargeIntegrationTest {
 
 	@Test
 	void 충전_후_잔액이_long_범위를_넘으면_409를_반환하고_DB를_변경하지_않는다() throws Exception {
-		jdbcTemplate.update("UPDATE user SET balance = ? WHERE id = ?", Long.MAX_VALUE, USER_ID);
+		jdbcTemplate.update("UPDATE users SET balance = ? WHERE id = ?", Long.MAX_VALUE, USER_ID);
 
 		mockMvc.perform(post("/users/{userId}/points/charge", USER_ID)
 				.contentType(MediaType.APPLICATION_JSON)

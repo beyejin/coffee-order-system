@@ -16,7 +16,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 	@Query(value = """
 			SELECT m.id AS menuId, m.name AS name, COUNT(o.id) AS orderCount
 			FROM orders o
-			JOIN menu m ON m.id = o.menu_id
+			JOIN menus m ON m.id = o.menu_id
 			WHERE o.created_at >= :from
 			  AND o.created_at < :to
 			GROUP BY m.id, m.name

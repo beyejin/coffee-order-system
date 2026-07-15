@@ -2,6 +2,8 @@ package com.example.coffee.domain.user.entity;
 
 import java.time.LocalDateTime;
 
+import com.example.coffee.global.error.BusinessException;
+import com.example.coffee.global.error.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -10,7 +12,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "user")
+@Table(name = "users")
 public class User {
 
 	@Id
@@ -30,6 +32,12 @@ public class User {
 	}
 
 	public void use(long amount) {
+		if (amount <= 0) {
+			throw new IllegalArgumentException("사용 포인트는 0보다 커야 합니다.");
+		}
+		if (balance < amount) {
+			throw new BusinessException(ErrorCode.INSUFFICIENT_POINT);
+		}
 		balance -= amount;
 	}
 

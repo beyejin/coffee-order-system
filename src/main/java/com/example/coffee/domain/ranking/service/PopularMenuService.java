@@ -28,7 +28,7 @@ public class PopularMenuService {
 				clock.instant().truncatedTo(ChronoUnit.MICROS),
 				ZoneOffset.UTC
 		);
-		LocalDateTime from = to.minusHours(168);
+		LocalDateTime from = to.minusDays(7);
 
 		return orderRepository.findPopularMenus(from, to).stream()
 				.map(PopularMenuResponse::from)
