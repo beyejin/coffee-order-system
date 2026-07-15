@@ -22,6 +22,7 @@
         "harness/orchestration-policy.json",
         "harness/tests/test_agent_harness.py",
         "harness/tests/test_agent_publish.py",
+        "harness/tests/test_orchestration_policy.py",
         "scripts/agent-harness.py",
         "scripts/agent-publish.py"
       ],
@@ -92,10 +93,23 @@
     {
       "id": "architecture-document",
       "patterns": [
+        "ARCHITECTURE.md",
         "docs/context-map.md"
       ],
       "risks": [
         "architecture"
+      ]
+    },
+    {
+      "id": "redis-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/infra/redis/**"
+      ],
+      "risks": [
+        "architecture",
+        "async",
+        "multi-instance",
+        "completion"
       ]
     },
     {
