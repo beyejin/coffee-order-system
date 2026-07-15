@@ -66,6 +66,9 @@ public class PopularMenuService {
 				.map(Menu::getId)
 				.toList();
 		Map<Long, Long> orderCounts = popularMenuCounter.countByMenuIds(menuIds, from, to);
+		if (orderCounts.values().stream().allMatch(count -> count == 0L)) {
+			return getFromDatabase(from, to);
+		}
 
 		return menus.stream()
 				.map(menu -> new PopularMenuResponse(

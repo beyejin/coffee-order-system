@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicReference;
@@ -101,6 +102,17 @@ class PopularMenuRedisIntegrationTest {
 	}
 
 	@Test
+	void Redis가_비어_있어도_기존_MySQL_주문을_반환한다() throws Exception {
+		insertOrder(1L, LocalDateTime.ofInstant(TO.minusSeconds(3600), ZoneOffset.UTC));
+		clock.setInstant(TO);
+
+		mockMvc.perform(get("/menus/popular"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data[0].menuId").value(1))
+				.andExpect(jsonPath("$.data[0].orderCount").value(1));
+	}
+
+	@Test
 	void 최근_7일_경계는_Redis_ZSET에서도_정확하게_적용된다() throws Exception {
 		placeOrderAt(FROM, 1L);
 		placeOrderAt(TO.minusNanos(1_000), 1L);
@@ -133,6 +145,13 @@ class PopularMenuRedisIntegrationTest {
 					.contentType(MediaType.APPLICATION_JSON)
 					.content("{\"userId\":1,\"menuId\":" + menuId + "}"))
 				.andExpect(status().isOk());
+	}
+
+	private void insertOrder(long menuId, LocalDateTime createdAt) {
+		jdbcTemplate.update("""
+				INSERT INTO orders (user_id, menu_id, price, created_at)
+				VALUES (1, ?, (SELECT price FROM menus WHERE id = ?), ?)
+				""", menuId, menuId, createdAt);
 	}
 
 	private void flushRedis() {
