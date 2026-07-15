@@ -670,6 +670,40 @@ class ScopeRiskTest(unittest.TestCase):
         )
         self.assertEqual((), classification.unclassified_paths)
 
+    def test_source_policy_classifies_current_repository_boundaries(self) -> None:
+        policy = HARNESS.load_risk_policy(SOURCE_POLICY)
+        cases = {
+            ".github/pull_request_template.md": ("completion",),
+            ".github/workflows/quality-gate.yml": ("completion",),
+            "src/AGENTS.md": ("completion",),
+            "scripts/check-doc-context.py": ("completion",),
+            "src/main/java/com/example/coffee/domain/menu/controller/MenuController.java": (
+                "api",
+                "architecture",
+                "migration",
+            ),
+            "src/main/java/com/example/coffee/domain/user/entity/User.java": (
+                "architecture",
+                "concurrency",
+                "migration",
+                "transaction",
+            ),
+            "src/main/java/com/example/coffee/global/error/ErrorCode.java": (
+                "api",
+                "architecture",
+            ),
+            "src/main/java/com/example/coffee/infra/dataplatform/MockDataPlatformClient.java": (
+                "architecture",
+                "async",
+            ),
+        }
+
+        for path, expected_risks in cases.items():
+            with self.subTest(path=path):
+                classification = HARNESS.classify_risks((path,), policy)
+                self.assertEqual(expected_risks, classification.detected_risks)
+                self.assertEqual((), classification.unclassified_paths)
+
     def test_unclassified_path_requires_replan_before_declaration_check(self) -> None:
         classification = HARNESS.classify_risks(
             ("unknown/new.file",),
@@ -2052,7 +2086,11 @@ class DocumentationTest(unittest.TestCase):
         agents = (root / "AGENTS.md").read_text(encoding="utf-8")
         workflow = (root / "docs/rules/workflow.md").read_text(encoding="utf-8")
         conventions = (root / "docs/rules/conventions.md").read_text(encoding="utf-8")
-        order = "Plan → Issue → Branch → Manifest → Prepare → Generate → Evaluate → Explain"
+        readme = (root / "harness/README.md").read_text(encoding="utf-8")
+        order = (
+            "Plan → Issue → Branch → Manifest → Prepare → Generate → "
+            "Verify → Commit → Evaluate → Publish → Explain"
+        )
         branch_format = (
             "(feature|fix|refactor|docs)/{이슈번호}-{lowercase-kebab}"
         )
@@ -2063,6 +2101,11 @@ class DocumentationTest(unittest.TestCase):
         self.assertIn("PASS=0", workflow)
         self.assertIn("기존 Flyway migration은 수정하거나 삭제하지 않는다", conventions)
         self.assertIn("allowedPaths", conventions)
+        for document in (agents, workflow, conventions, readme):
+            self.assertIn("Ready for review PR", document)
+            self.assertIn("local-only", document)
+            self.assertIn("일반 변경 요청은 Commit과 Publish까지 포함", document)
+        self.assertIn("로컬 `main`에 직접 커밋하거나 병합하지 않는다", conventions)
 
 
 if __name__ == "__main__":

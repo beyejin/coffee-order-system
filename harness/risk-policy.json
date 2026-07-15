@@ -36,6 +36,27 @@
       ]
     },
     {
+      "id": "agent-context",
+      "patterns": [
+        "scripts/AGENTS.md",
+        "src/AGENTS.md",
+        "scripts/check-doc-context.py"
+      ],
+      "risks": [
+        "completion"
+      ]
+    },
+    {
+      "id": "github-review-flow",
+      "patterns": [
+        ".github/pull_request_template.md",
+        ".github/workflows/quality-gate.yml"
+      ],
+      "risks": [
+        "completion"
+      ]
+    },
+    {
       "id": "project-documents",
       "patterns": [
         "README.md",
@@ -84,7 +105,7 @@
       ]
     },
     {
-      "id": "common-boundary",
+      "id": "legacy-common-boundary",
       "patterns": [
         "src/main/java/com/example/coffee/common/**"
       ],
@@ -94,7 +115,7 @@
       ]
     },
     {
-      "id": "menu-boundary",
+      "id": "legacy-menu-boundary",
       "patterns": [
         "src/main/java/com/example/coffee/menu/**"
       ],
@@ -105,7 +126,7 @@
       ]
     },
     {
-      "id": "order-boundary",
+      "id": "legacy-order-boundary",
       "patterns": [
         "src/main/java/com/example/coffee/order/**"
       ],
@@ -119,7 +140,7 @@
       ]
     },
     {
-      "id": "point-boundary",
+      "id": "legacy-point-boundary",
       "patterns": [
         "src/main/java/com/example/coffee/point/**"
       ],
@@ -129,6 +150,87 @@
         "migration",
         "transaction",
         "concurrency"
+      ]
+    },
+    {
+      "id": "global-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/global/**"
+      ],
+      "risks": [
+        "architecture",
+        "api"
+      ]
+    },
+    {
+      "id": "menu-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/domain/menu/**"
+      ],
+      "risks": [
+        "architecture",
+        "api",
+        "migration"
+      ]
+    },
+    {
+      "id": "order-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/domain/order/**"
+      ],
+      "risks": [
+        "architecture",
+        "api",
+        "migration",
+        "transaction",
+        "concurrency",
+        "async"
+      ]
+    },
+    {
+      "id": "point-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/domain/point/**"
+      ],
+      "risks": [
+        "architecture",
+        "api",
+        "migration",
+        "transaction",
+        "concurrency"
+      ]
+    },
+    {
+      "id": "ranking-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/domain/ranking/**"
+      ],
+      "risks": [
+        "architecture",
+        "api",
+        "migration"
+      ]
+    },
+    {
+      "id": "user-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/domain/user/**"
+      ],
+      "risks": [
+        "architecture",
+        "migration",
+        "transaction",
+        "concurrency"
+      ]
+    },
+    {
+      "id": "data-platform-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/infra/dataplatform/**"
+      ],
+      "risks": [
+        "architecture",
+        "async"
       ]
     },
     {

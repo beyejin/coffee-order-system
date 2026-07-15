@@ -1,6 +1,6 @@
 # 개발·검증 흐름
 
-기능은 `Plan → Issue → Branch → Manifest → Prepare → Generate → Evaluate → Explain` 순서로 진행합니다. 상태 관리는 이 문서에서, machine-readable 범위는 `harness/plans/{issue}.json`에서, 실제 시도와 증거는 `docs/logs/{기능}.md`에서 관리합니다.
+기능은 `Plan → Issue → Branch → Manifest → Prepare → Generate → Verify → Commit → Evaluate → Publish → Explain` 순서로 진행합니다. 상태 관리는 이 문서에서, machine-readable 범위는 `harness/plans/{issue}.json`에서, 실제 시도와 증거는 `docs/logs/{기능}.md`에서 관리합니다.
 
 ## 작업 순서
 
@@ -53,16 +53,35 @@
 - 다음 기능, 불필요한 인프라, 인접 리팩터링을 선행하지 않습니다.
 - 현재 브랜치가 해당 이슈의 작업 브랜치인지 확인한 뒤 코드를 변경합니다.
 
+## Verify
+
+- 변경 범위에 맞는 단위·통합 테스트와 정적 검사를 실제로 실행합니다.
+- DB·락·트랜잭션 변경은 H2가 아니라 MySQL Testcontainers로 검증합니다.
+- 실패하면 원인을 기록하고 Generate로 돌아가 최소 수정한 뒤 같은 검사를 다시 실행합니다.
+
+## Commit
+
+- 검증을 통과한 파일만 경로를 명시해 stage하고 diff 범위를 다시 확인합니다.
+- 한국어 Conventional Commit으로 작업 단위를 기록하며 로컬 `main`에는 커밋하지 않습니다.
+- 최종 커밋 뒤 작업 폴더가 깨끗한지 확인하고 Evaluate로 이동합니다.
+
 ## Evaluate
 
-- 완료 선언 전 `python3 scripts/agent-harness.py evaluate harness/plans/{issue}.json`을 실행합니다.
+- 최종 커밋 HEAD에서 `python3 scripts/agent-harness.py evaluate harness/plans/{issue}.json`을 실행합니다.
 - 상태는 `PASS=0`, `FAIL=1`, `BLOCKED=2`, `REPLAN_REQUIRED=3`입니다.
 - FAIL은 최소 수정 뒤 다시 검증하고, BLOCKED는 환경이나 oracle을 준비하며, REPLAN_REQUIRED는 manifest와 사람의 범위 검토로 돌아갑니다.
 - 현재 base tip·merge-base·HEAD·plan·diff에 연결된 PASS evidence만 완료 근거입니다.
-- DB·락·트랜잭션 검증은 H2가 아니라 MySQL Testcontainers로 실행합니다.
 - 성공을 추측하지 않고 실제 명령 결과를 확인합니다.
 - 실패와 성공을 모두 기능 로그의 `Attempt`에 추가합니다.
-- 실패하면 원인을 설명한 뒤 Generate로 돌아가 최소 수정하고 재검증합니다.
+
+## Publish
+
+- 검증된 작업 branch를 `origin`에 tracking push합니다.
+- GitHub issue를 연결한 `main` 대상 Ready for review PR을 만들고 실제 테스트 명령과 결과를 본문에 적습니다.
+- Draft PR은 사용자가 명시적으로 요청한 경우에만 사용합니다.
+- 사용자가 명시적으로 `local-only` 또는 push 금지를 요청한 경우에만 Publish를 생략하고, branch·commit과 원격 미게시 상태를 보고합니다.
+- 사용자의 일반 변경 요청은 Commit과 Publish까지 포함합니다. Merge는 별도 요청이 있을 때만 수행합니다.
+- PR merge는 CI와 리뷰 뒤에 수행하며 사용자가 요청하지 않은 자동 merge는 하지 않습니다.
 
 ## Explain
 
@@ -75,7 +94,7 @@
 5. 다른 후보 대신 이 전략을 선택한 근거는 무엇인가?
 6. 테스트·SQL·실행 결과로 어떻게 증명했는가?
 
-검증이 끝난 변경은 pull request로만 `main`에 병합합니다. Phase 1A와 Phase 1B bootstrap은 repository owner가 수동 검토하고, Phase 1B canary 뒤에는 required checks를 모두 통과해야 합니다. 커밋·병합은 사용자가 요청한 범위에서만 수행합니다.
+검증이 끝난 변경은 pull request로만 `main`에 병합합니다. 기본 완료 조건은 현재 HEAD에 연결된 PASS evidence와 Ready for review PR URL입니다. Phase 1A와 Phase 1B bootstrap은 repository owner가 수동 검토하고, Phase 1B canary 뒤에는 required checks를 모두 통과해야 합니다.
 
 ## 기능 로그
 
