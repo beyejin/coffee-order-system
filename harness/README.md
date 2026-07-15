@@ -4,7 +4,7 @@
 
 ## 현재 범위
 
-현재 구현은 Phase 1A 로컬 trust core입니다. GitHub trusted/candidate workflow, branch protection, 도메인별 oracle와 mutation benchmark는 아직 강제하지 않습니다. 해당 검사가 필요한 변경은 PASS로 대체하지 않고 BLOCKED로 남깁니다.
+현재 구현은 Phase 1A 로컬 trust core와 8개 도메인 oracle입니다. GitHub trusted/candidate workflow, branch protection, mutation benchmark는 아직 강제하지 않습니다. 도메인 oracle은 구조·API·migration·트랜잭션·동시성·비동기·다중 인스턴스 경계를 실제 파일과 테스트로 판정합니다.
 
 ## Issue 단위 오케스트레이션
 
@@ -28,8 +28,21 @@
 |---|---:|---|
 | PASS | 0 | 현재 base tip, merge-base, HEAD, plan, diff에 필요한 검증이 성공 |
 | FAIL | 1 | schema, 구현, test 또는 command가 결정론적으로 실패 |
-| BLOCKED | 2 | Docker, Java 또는 아직 구현되지 않은 oracle 때문에 판단 불가 |
+| BLOCKED | 2 | Docker·Java 등 필수 실행 환경을 사용할 수 없어 판단 불가 |
 | REPLAN_REQUIRED | 3 | 범위 밖 변경, 미분류 경로, 미선언 위험, plan·base 이동 |
+
+## 도메인 oracle
+
+다음 check는 `scripts/harness-oracles.py`가 실행하며, 미구현 상태를 PASS로 대체하지 않습니다.
+
+- `oracle.architecture`: Java import 경계와 순환 의존성
+- `oracle.api-contract`: controller route, 공통 응답·오류 contract, API 회귀 테스트
+- `oracle.migration-fresh`: V1부터 최신 migration까지 fresh DB 적용
+- `oracle.migration-upgrade`: 기존 데이터가 있는 V5 DB의 최신 migration upgrade
+- `oracle.transaction`: 충전·주문 원자성과 rollback 통합 테스트
+- `oracle.cross-domain-concurrency`: 충전과 주문 혼합 동시성 불변식
+- `oracle.async-isolation`: 커밋 후 외부 전송과 응답 격리
+- `oracle.multi-instance`: Compose 두 인스턴스와 공유 MySQL·Redis smoke
 
 ## 작업 순서
 
@@ -80,10 +93,12 @@ Draft PR은 사용자가 명시적으로 요청한 경우에만 사용합니다.
 
 evaluation.json은 baseTipSha, mergeBaseSha, candidateHeadSha, testedRevisionSha, planHash, diffHash, declaredRisks, detectedRisks, changedPaths, checks와 최종 state를 기록합니다. commit으로 HEAD가 바뀌거나 plan·base·diff가 바뀌면 이전 evidence는 완료 근거가 아닙니다.
 
+기본 gate는 `scope.allowed-paths`, `risk.classification`, `risk.declaration`, `trust-root.contract`, `harness.unit`, `gradle.test`, 8개 도메인 oracle, `evidence.freshness`입니다.
+
 Phase 1A에는 별도 stale evidence 소비 명령이 없습니다. 완료 직전에 evaluate를 다시 실행하고 현재 Git identity와 JSON을 대조합니다. Phase 1B CI는 PR event에서 identity를 재구성해 오래된 artifact 사용을 기계적으로 거부합니다.
 
 ## Bootstrap 예외
 
-과거 issue #4의 로컬 `main` 동기화 PR은 원격에 게시되지 않았던 기존 검증 커밋을 공개하는 일회성 복구였습니다. evaluate는 생략하지 않았으며 모든 비-`oracle.*` check가 PASS이고 BLOCKED check가 미구현 `oracle.*`뿐이며 FAIL과 REPLAN_REQUIRED가 없을 때만 repository owner 수동 검토를 위해 Publish할 수 있었습니다. 최소한 `scope.allowed-paths`, `risk.classification`, `risk.declaration`, `trust-root.contract`, `harness.unit`, `gradle.test`, `evidence.freshness`는 PASS여야 했습니다. 이 예외는 Publish만 허용할 뿐 하네스 PASS나 작업 완료를 뜻하지 않으며, issue #4 PR merge와 동시에 만료되어 재사용할 수 없습니다.
+과거 issue #4의 로컬 `main` 동기화 PR은 원격에 게시되지 않았던 기존 검증 커밋을 공개하는 일회성 복구였습니다. 당시에는 도메인 oracle이 아직 없었으므로 제한된 예외로 Publish했지만, issue #4 PR merge와 동시에 만료되었습니다. 현재 작업은 모든 필수 oracle과 `evidence.freshness`가 PASS하고 FAIL과 REPLAN_REQUIRED가 없을 때만 Publish할 수 있습니다. 이 조건은 하네스 PASS나 작업 완료를 뜻하지 않으며, 실제 PR·이슈 상태도 별도로 확인합니다.
 
 Phase 1A PR에는 기본 브랜치 판정기가 없고, Phase 1B PR에는 새 trusted workflow가 아직 기본 브랜치에 없습니다. 따라서 두 bootstrap PR은 trusted 검증이 준비될 때까지 자동 병합 대상에서 제외합니다. trusted workflow와 canary 검증이 기본 브랜치에 반영된 뒤 일반 제품 PR에 자동 병합을 적용합니다.

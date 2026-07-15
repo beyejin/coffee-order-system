@@ -2055,7 +2055,7 @@ class EvaluationTest(unittest.TestCase):
         self.assertEqual(link_hash, same_target_hash)
         self.assertNotEqual(link_hash, other_target_hash)
 
-    def test_required_check_ids_are_unique_and_unimplemented_oracle_blocks(self) -> None:
+    def test_required_check_ids_are_unique_and_implemented_oracle_runs(self) -> None:
         policy = HARNESS.load_risk_policy(SOURCE_POLICY)
         plan = make_plan(declared_risks=("scope", "completion", "concurrency"))
         classification = HARNESS.RiskClassification(
@@ -2077,7 +2077,40 @@ class EvaluationTest(unittest.TestCase):
         self.assertNotIn("risk.classification", check_ids)
         self.assertNotIn("risk.declaration", check_ids)
         self.assertEqual(1, len(oracle_results))
-        self.assertEqual(HARNESS.State.BLOCKED, oracle_results[0].state)
+        self.assertEqual(HARNESS.State.PASS, oracle_results[0].state)
+
+    def test_all_domain_oracles_have_executable_check_runners(self) -> None:
+        oracle_ids = (
+            "oracle.architecture",
+            "oracle.api-contract",
+            "oracle.migration-fresh",
+            "oracle.migration-upgrade",
+            "oracle.transaction",
+            "oracle.cross-domain-concurrency",
+            "oracle.async-isolation",
+            "oracle.multi-instance",
+        )
+
+        with patch.object(
+            HARNESS,
+            "execute_command",
+            side_effect=lambda _root, check_id, command: HARNESS.CheckResult(
+                check_id,
+                HARNESS.State.PASS,
+                "stubbed oracle command",
+                command,
+                0,
+                0,
+            ),
+        ) as execute_command:
+            results = HARNESS.run_required_checks(REPO_ROOT, oracle_ids)
+
+        self.assertEqual(oracle_ids, tuple(result.check_id for result in results))
+        self.assertTrue(all(result.state is HARNESS.State.PASS for result in results))
+        self.assertEqual(len(oracle_ids), execute_command.call_count)
+        for call, check_id in zip(execute_command.call_args_list, oracle_ids):
+            self.assertEqual(check_id, call.args[1])
+            self.assertEqual("scripts/harness-oracles.py", call.args[2][1])
 
     def test_execute_command_records_output_status_and_environment(self) -> None:
         success = HARNESS.execute_command(
@@ -2279,7 +2312,7 @@ class DocumentationTest(unittest.TestCase):
                 "git rev-parse origin/$(git branch --show-current)",
                 document,
             )
-        self.assertIn("모든 비-`oracle.*` check가 PASS", readme)
+        self.assertIn("8개 도메인 oracle", readme)
         for required_check in (
             "scope.allowed-paths",
             "risk.classification",
@@ -2288,6 +2321,14 @@ class DocumentationTest(unittest.TestCase):
             "harness.unit",
             "gradle.test",
             "evidence.freshness",
+            "oracle.architecture",
+            "oracle.api-contract",
+            "oracle.migration-fresh",
+            "oracle.migration-upgrade",
+            "oracle.transaction",
+            "oracle.cross-domain-concurrency",
+            "oracle.async-isolation",
+            "oracle.multi-instance",
         ):
             self.assertIn(required_check, readme)
         self.assertIn("FAIL과 REPLAN_REQUIRED가 없을 때만", readme)

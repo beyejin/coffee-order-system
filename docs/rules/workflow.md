@@ -70,7 +70,7 @@
 - 최종 커밋 HEAD에서 `python3 scripts/agent-harness.py evaluate harness/plans/issue-{issue}-<slug>.json`을 실행합니다.
 - evaluate 시작과 종료 시 작업 폴더가 clean하지 않으면 `REPLAN_REQUIRED`의 `git.clean`으로 중단합니다.
 - 상태는 `PASS=0`, `FAIL=1`, `BLOCKED=2`, `REPLAN_REQUIRED=3`입니다.
-- FAIL은 최소 수정 뒤 다시 검증하고, BLOCKED는 자동 실행기가 환경이나 oracle을 준비하며, REPLAN_REQUIRED는 manifest를 갱신한 뒤 Plan으로 돌아갑니다.
+- FAIL은 최소 수정 뒤 다시 검증하고, BLOCKED는 Docker·Java 등 필수 실행 환경을 준비한 뒤 다시 실행하며, REPLAN_REQUIRED는 manifest를 갱신한 뒤 Plan으로 돌아갑니다.
 - 현재 base tip·merge-base·HEAD·plan·diff에 연결된 PASS evidence만 완료 근거입니다.
 - 성공을 추측하지 않고 실제 명령 결과를 확인합니다.
 - 실패와 성공을 모두 기능 로그의 `Attempt`에 추가합니다.

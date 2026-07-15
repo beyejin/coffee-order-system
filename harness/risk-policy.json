@@ -18,12 +18,15 @@
         "harness/README.md",
         "harness/plan.example.json",
         "harness/plans/**",
+        "harness/contracts/**",
         "harness/risk-policy.json",
         "harness/orchestration-policy.json",
         "harness/tests/test_agent_harness.py",
         "harness/tests/test_agent_publish.py",
+        "harness/tests/test_harness_oracles.py",
         "harness/tests/test_orchestration_policy.py",
         "scripts/agent-harness.py",
+        "scripts/harness-oracles.py",
         "scripts/agent-publish.py"
       ],
       "risks": [
@@ -280,6 +283,28 @@
       ]
     },
     {
+      "id": "cross-domain-concurrency-test",
+      "patterns": [
+        "src/test/java/com/example/coffee/domain/concurrency/CrossDomainConcurrencyIntegrationTest.java"
+      ],
+      "risks": [
+        "transaction",
+        "concurrency",
+        "completion"
+      ]
+    },
+    {
+      "id": "async-isolation-test",
+      "patterns": [
+        "src/test/java/com/example/coffee/domain/order/OrderAsyncIsolationTest.java"
+      ],
+      "risks": [
+        "transaction",
+        "async",
+        "completion"
+      ]
+    },
+    {
       "id": "build-system",
       "patterns": [
         "build.gradle",
@@ -355,6 +380,14 @@
     "risk.classification",
     "risk.declaration",
     "harness.unit",
-    "gradle.test"
+    "gradle.test",
+    "oracle.architecture",
+    "oracle.api-contract",
+    "oracle.migration-fresh",
+    "oracle.migration-upgrade",
+    "oracle.transaction",
+    "oracle.cross-domain-concurrency",
+    "oracle.async-isolation",
+    "oracle.multi-instance"
   ]
 }

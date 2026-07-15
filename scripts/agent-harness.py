@@ -235,6 +235,19 @@ GRADLE_TEST_COMMAND = ("./gradlew", "clean", "test", "--console", "plain")
 INLINE_CHECK_IDS = frozenset(
     {"scope.allowed-paths", "risk.classification", "risk.declaration"}
 )
+DOMAIN_ORACLE_CHECK_IDS = frozenset(
+    {
+        "oracle.architecture",
+        "oracle.api-contract",
+        "oracle.migration-fresh",
+        "oracle.migration-upgrade",
+        "oracle.transaction",
+        "oracle.cross-domain-concurrency",
+        "oracle.async-isolation",
+        "oracle.multi-instance",
+    }
+)
+ORACLE_SCRIPT_PATH = "scripts/harness-oracles.py"
 
 
 class _DuplicateJsonKey(ValueError):
@@ -611,6 +624,17 @@ def load_risk_policy(path: Path) -> RiskPolicy:
         raise policy_error(
             "implementedChecks에 riskChecks에 없는 값이 있습니다: "
             f"{sorted(unknown_implemented_checks)}"
+        )
+    runtime_check_ids = (
+        set(INLINE_CHECK_IDS)
+        | {"harness.unit", "gradle.test"}
+        | set(DOMAIN_ORACLE_CHECK_IDS)
+    )
+    unsupported_runtime_checks = set(implemented_check_values) - runtime_check_ids
+    if unsupported_runtime_checks:
+        raise policy_error(
+            "implementedChecks에 실행기가 없는 값이 있습니다: "
+            f"{sorted(unsupported_runtime_checks)}"
         )
 
     return RiskPolicy(
@@ -1588,7 +1612,7 @@ def execute_command(
     if result.returncode == 0:
         state = State.PASS
     elif (
-        check_id == "gradle.test"
+        (check_id == "gradle.test" or check_id.startswith("oracle."))
         and "Could not find a valid Docker environment" in full_output
     ):
         state = State.BLOCKED
@@ -1646,12 +1670,25 @@ def run_required_checks(
                         GRADLE_TEST_COMMAND,
                     )
                 )
+        elif check_id in DOMAIN_ORACLE_CHECK_IDS:
+            checks.append(
+                execute_command(
+                    root,
+                    check_id,
+                    (
+                        sys.executable,
+                        ORACLE_SCRIPT_PATH,
+                        root.as_posix(),
+                        check_id,
+                    ),
+                )
+            )
         else:
             checks.append(
                 CheckResult(
                     check_id,
                     State.BLOCKED,
-                    "아직 구현되지 않은 필수 oracle입니다.",
+                    "구현되지 않은 필수 check입니다.",
                 )
             )
     return tuple(checks)
