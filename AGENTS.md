@@ -25,6 +25,7 @@
 | 도메인 불변식과 미확정 결정 확인 | [`docs/rules/policy.md`](docs/rules/policy.md) |
 | 기능 구현·브랜치·검증 흐름 확인 | [`docs/rules/workflow.md`](docs/rules/workflow.md) |
 | 에이전트 작업 범위·검증 게이트 확인 | [`harness/README.md`][harness-readme] |
+| 메인 오케스트레이터·서브에이전트 역할 확인 | [`docs/ai/orchestration-policy.md`](docs/ai/orchestration-policy.md) |
 | 문서·커밋 작성 규칙 확인 | [`docs/rules/conventions.md`](docs/rules/conventions.md) |
 | 이전 시도와 실제 검증 결과 확인 | [`docs/logs/`](docs/logs/README.md) |
 | 에이전트 작업 pass-rate 확인 | [`docs/agent-evaluation.md`](docs/agent-evaluation.md) |
@@ -61,3 +62,8 @@
 사용자의 일반 변경 요청은 Commit과 Publish까지 포함한다. Merge는 사용자가 별도로 요청한 경우에만 수행한다.
 
 문서에 없는 판단이나 `policy.md`의 미확정 항목이 필요하면 구현 전에 질문한다.
+
+한 issue 안의 에이전트 실행은 [`docs/ai/orchestration-policy.md`](docs/ai/orchestration-policy.md)의
+4-role 계약을 따른다. `implementation`만 유일한 writer이고,
+`verification`·`qa`·`pr-review`는 read-only다. main orchestrator는 최종 `evaluate`만
+재실행하며 merge하지 않고, 실제 merge는 사용자가 수행한다.

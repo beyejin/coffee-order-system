@@ -6,6 +6,22 @@
 
 현재 구현은 Phase 1A 로컬 trust core입니다. GitHub trusted/candidate workflow, branch protection, 도메인별 oracle와 mutation benchmark는 아직 강제하지 않습니다. 해당 검사가 필요한 변경은 PASS로 대체하지 않고 BLOCKED로 남깁니다.
 
+## Issue 단위 오케스트레이션
+
+메인 오케스트레이터와 서브에이전트의 실행 계약은
+[`docs/ai/orchestration-policy.md`](../docs/ai/orchestration-policy.md)에 두고,
+기계 판독 값은 [`orchestration-policy.json`](orchestration-policy.json)에 둡니다.
+
+- 하나의 issue에는 `implementation`, `verification`, `qa`, `pr-review` 네 role slot만 둡니다.
+- 하나의 issue는 하나의 branch와 하나의 PR로 끝까지 유지합니다.
+- 동시에 실행하는 role은 최대 2개이며, 제품 파일을 쓰는 role은 `implementation` 하나뿐입니다.
+- reviewer role은 read-only로 PASS/REJECT와 blocking finding만 반환합니다.
+- repair loop은 최대 3회, PR review 재리뷰는 최대 2회입니다.
+- repair loop 한도에 도달하면 `HUMAN_REVIEW`에서 멈추며 자동으로 PASS나 merge를 만들지 않습니다.
+- main orchestrator는 현재 HEAD에서 최종 `evaluate`를 다시 실행하지만 merge하지 않습니다. `main` 병합은 사용자만 수행합니다.
+
+이 정책은 agent spawning runtime이나 자동 merge를 구현하지 않습니다. 실제 변경의 범위와 완료 증거는 기존 manifest와 `evaluation.json` 게이트가 계속 판정합니다.
+
 ## 상태
 
 | 상태 | exit code | 의미 |

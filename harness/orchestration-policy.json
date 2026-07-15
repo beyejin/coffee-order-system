@@ -1,0 +1,329 @@
+{
+  "schemaVersion": 1,
+  "policyId": "one-issue-four-role-loop",
+  "humanPolicyPath": "docs/ai/orchestration-policy.md",
+  "scope": {
+    "unit": "one-github-issue",
+    "oneBranchPerIssue": true,
+    "onePrPerIssue": true,
+    "externalServices": false,
+    "agentSpawningRuntime": false,
+    "mergeActor": "user"
+  },
+  "roleSlots": {
+    "maxPerIssue": 4,
+    "maxConcurrent": 2,
+    "parallelCondition": "independent read-only checks only; shared DB, Compose, or evidence checks are serialized",
+    "roles": [
+      "implementation",
+      "verification",
+      "qa",
+      "pr-review"
+    ]
+  },
+  "roles": {
+    "implementation": {
+      "writer": true,
+      "readOnly": false,
+      "canApprove": false,
+      "writeScope": "manifest.allowedPaths",
+      "responsibilities": [
+        "IMPLEMENT",
+        "FIX_LOOP"
+      ],
+      "resultValues": [
+        "PASS",
+        "FAIL",
+        "BLOCKED",
+        "REPLAN_REQUIRED"
+      ]
+    },
+    "verification": {
+      "writer": false,
+      "readOnly": true,
+      "canApprove": false,
+      "writeScope": "none",
+      "responsibilities": [
+        "VERIFY"
+      ],
+      "resultValues": [
+        "PASS",
+        "REJECT"
+      ]
+    },
+    "qa": {
+      "writer": false,
+      "readOnly": true,
+      "canApprove": false,
+      "writeScope": "none",
+      "responsibilities": [
+        "QA"
+      ],
+      "resultValues": [
+        "PASS",
+        "REJECT"
+      ]
+    },
+    "pr-review": {
+      "writer": false,
+      "readOnly": true,
+      "canApprove": true,
+      "writeScope": "none",
+      "responsibilities": [
+        "PR_REVIEW"
+      ],
+      "resultValues": [
+        "PASS",
+        "REJECT"
+      ]
+    }
+  },
+  "limits": {
+    "maxRepairLoops": 3,
+    "maxPrReviewRereviews": 2,
+    "maxWritersPerIssue": 1
+  },
+  "mainOrchestrator": {
+    "responsibilities": [
+      "PLAN",
+      "ISSUE",
+      "MANIFEST",
+      "ASSIGN",
+      "RETRY",
+      "FINAL_EVALUATE"
+    ],
+    "mustNotPerform": [
+      "IMPLEMENT",
+      "VERIFY",
+      "QA",
+      "PR_REVIEW",
+      "MERGE"
+    ],
+    "canWriteProductFiles": false,
+    "canMerge": false,
+    "mergeActor": "user"
+  },
+  "stateMachine": {
+    "states": [
+      "PLAN",
+      "ASSIGN",
+      "IMPLEMENT",
+      "VERIFY",
+      "QA",
+      "PR_REVIEW",
+      "FIX_LOOP",
+      "FINAL_EVALUATE",
+      "HUMAN_REVIEW",
+      "HUMAN_MERGE"
+    ],
+    "terminalState": "HUMAN_MERGE",
+    "nonMergeTerminalStates": ["HUMAN_REVIEW"],
+    "transitions": {
+      "forward": [
+        {
+          "from": "PLAN",
+          "to": "ASSIGN"
+        },
+        {
+          "from": "ASSIGN",
+          "to": "IMPLEMENT"
+        },
+        {
+          "from": "IMPLEMENT",
+          "to": "VERIFY"
+        },
+        {
+          "from": "VERIFY",
+          "to": "QA"
+        },
+        {
+          "from": "QA",
+          "to": "PR_REVIEW"
+        },
+        {
+          "from": "PR_REVIEW",
+          "to": "FIX_LOOP"
+        },
+        {
+          "from": "FIX_LOOP",
+          "to": "FINAL_EVALUATE"
+        },
+        {
+          "from": "FINAL_EVALUATE",
+          "to": "HUMAN_MERGE",
+          "when": "FINAL_EVALUATE == PASS"
+        }
+      ],
+      "repair": [
+        {
+          "from": "FIX_LOOP",
+          "to": "IMPLEMENT",
+          "when": "blocking findings remain and repairLoops < limits.maxRepairLoops"
+        },
+        {
+          "from": "FIX_LOOP",
+          "to": "FINAL_EVALUATE",
+          "when": "no blocking findings remain"
+        },
+        {
+          "from": "FIX_LOOP",
+          "to": "HUMAN_REVIEW",
+          "when": "repair loop limit exhausted; do not merge"
+        }
+      ],
+      "FAIL": {
+        "from": [
+          "IMPLEMENT",
+          "VERIFY",
+          "QA",
+          "PR_REVIEW",
+          "FINAL_EVALUATE"
+        ],
+        "to": "FIX_LOOP",
+        "when": "deterministic failure or blocking finding while repairLoops < limits.maxRepairLoops",
+        "exhaustedTo": "HUMAN_REVIEW"
+      },
+      "BLOCKED": {
+        "from": [
+          "PLAN",
+          "ASSIGN",
+          "IMPLEMENT",
+          "VERIFY",
+          "QA",
+          "PR_REVIEW",
+          "FIX_LOOP",
+          "FINAL_EVALUATE"
+        ],
+        "to": "PLAN",
+        "requires": "human resolves the blocker before restart"
+      },
+      "REPLAN_REQUIRED": {
+        "from": [
+          "PLAN",
+          "ASSIGN",
+          "IMPLEMENT",
+          "VERIFY",
+          "QA",
+          "PR_REVIEW",
+          "FIX_LOOP",
+          "FINAL_EVALUATE"
+        ],
+        "to": "PLAN",
+        "requires": "human reviews scope and manifest before assignment"
+      }
+    },
+    "mergeGuard": {
+      "entry": "HUMAN_MERGE",
+      "requires": [
+        "FINAL_EVALUATE == PASS",
+        "candidateHead equals evaluated HEAD",
+        "changed paths are within manifest.allowedPaths",
+        "required handoffs conform to handoffSchema"
+      ],
+      "actor": "user",
+      "mainOrchestratorMayMerge": false
+    }
+  },
+  "singleSourceOfTruth": {
+    "items": [
+      "manifest",
+      "candidateHead",
+      "allowedPaths",
+      "completionContract",
+      "handoffSchema"
+    ],
+    "bindings": {
+      "manifest": "harness/plans/{issue}.json",
+      "candidateHead": "current candidate branch HEAD",
+      "allowedPaths": "manifest.allowedPaths",
+      "completionContract": "manifest.acceptanceCriteria + completionContract.requiredEvidence",
+      "handoffSchema": "this policy.handoffSchema"
+    }
+  },
+  "completionContract": {
+    "source": "manifest.acceptanceCriteria",
+    "requiredEvidence": [
+      "implementation PASS handoff",
+      "verification PASS handoff",
+      "qa PASS handoff",
+      "pr-review PASS handoff",
+      "final evaluation PASS"
+    ],
+    "mergePreconditions": [
+      "final evaluation result is PASS",
+      "candidateHead equals evaluated HEAD",
+      "changed paths are within manifest.allowedPaths",
+      "handoffs conform to handoffSchema",
+      "user is the merge actor"
+    ]
+  },
+  "handoffSchema": {
+    "version": 1,
+    "requiredFields": [
+      "role",
+      "candidateHead",
+      "issue",
+      "status",
+      "changedPaths",
+      "commands",
+      "evidence",
+      "findings",
+      "nextAction",
+      "manifest",
+      "allowedPaths",
+      "completionContract",
+      "state",
+      "nextState"
+    ],
+    "fieldTypes": {
+      "role": "one-of:roles",
+      "candidateHead": "sha",
+      "issue": "integer",
+      "status": "one-of:PASS|REJECT|FAIL|BLOCKED|REPLAN_REQUIRED",
+      "changedPaths": "array<string>",
+      "commands": "array<string>",
+      "evidence": "array<string>",
+      "findings": "array<object>",
+      "nextAction": "string",
+      "manifest": "path",
+      "allowedPaths": "array<string>",
+      "completionContract": "reference-or-hash",
+      "state": "one-of:stateMachine.states",
+      "nextState": "one-of:stateMachine.states"
+    },
+    "resultValues": [
+      "PASS",
+      "REJECT",
+      "FAIL",
+      "BLOCKED",
+      "REPLAN_REQUIRED"
+    ],
+    "reviewerResultValues": [
+      "PASS",
+      "REJECT"
+    ],
+    "blockingFindingFields": [
+      "id",
+      "severity",
+      "path",
+      "message"
+    ],
+    "blockingFindingRequiredOnReject": true
+  },
+  "reviewContract": {
+    "reviewerRoles": [
+      "verification",
+      "qa",
+      "pr-review"
+    ],
+    "readOnly": true,
+    "canModifyCodeOrDocs": false,
+    "resultValues": [
+      "PASS",
+      "REJECT"
+    ],
+    "rejectRequiresBlockingFindings": true,
+    "mainMustRerunFinalEvaluate": true,
+    "reviewResultIsNotFinalEvidence": true
+  }
+}

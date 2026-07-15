@@ -162,6 +162,7 @@ erDiagram
 - [API 명세](docs/api-spec.md)
 - [도메인 정책](docs/rules/policy.md)
 - [개발·검증 흐름](docs/rules/workflow.md)
+- [AI 작업 오케스트레이션 계약](docs/ai/orchestration-policy.md)
 - [실행 증거](docs/logs/README.md)
 
 ## 진행 상태

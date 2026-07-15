@@ -19,6 +19,7 @@
         "harness/plan.example.json",
         "harness/plans/**",
         "harness/risk-policy.json",
+        "harness/orchestration-policy.json",
         "harness/tests/test_agent_harness.py",
         "scripts/agent-harness.py"
       ],
