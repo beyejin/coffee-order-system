@@ -1,0 +1,310 @@
+{
+  "meta": {
+    "repo": "coffee-order-system",
+    "path": "/Users/han-yejin/IdeaProjects/coffee-order-system",
+    "scored_at": "2026-07-13",
+    "git_branch": "refactor/1-package-structure",
+    "rubric_version": "v2-100pt",
+    "modules_total": 2,
+    "context_files_total": 5,
+    "large_files_300plus": 1
+  },
+  "total": 52,
+  "grade": "AI-Fragile",
+  "grade_color": "amber",
+  "categories": {
+    "A": {
+      "name": "AI Navigation & Coverage",
+      "score": 15,
+      "max": 15,
+      "evidence": {
+        "core_modules": 2,
+        "covered_modules": 2,
+        "coverage_ratio": 1.0,
+        "root_context": "AGENTS.md"
+      },
+      "sub_scores": {},
+      "findings": []
+    },
+    "B": {
+      "name": "Context Document Quality",
+      "score": 12,
+      "max": 20,
+      "evidence": {
+        "context_files": 5,
+        "max_lines": 177,
+        "min_lines": 8
+      },
+      "sub_scores": {
+        "B1_Conciseness": 2,
+        "B2_QuickCommands": 1,
+        "B3_KeyFiles": 4,
+        "B4_NonObvious": 1,
+        "B5_CrossRefs": 4
+      },
+      "findings": [
+        "conciseness 초과(>100 lines) context 1건: README.md (177)",
+        "bash 코드블록이 부족 — quick command 보강 필요",
+        "Why/Note/Gotcha 같은 hidden rule 마커 부족"
+      ]
+    },
+    "C": {
+      "name": "Tribal Knowledge Externalization",
+      "score": 0,
+      "max": 20,
+      "evidence": {
+        "memory_md": false,
+        "adr": false,
+        "modules_total": 2,
+        "q1_owns": 0,
+        "q2_patterns": 0,
+        "q3_nonobvious": 0,
+        "q4_deps": 0
+      },
+      "sub_scores": {
+        "C_Q1_Owns": 0,
+        "C_Q2_Patterns": 0,
+        "C_Q3_NonObvious": 0,
+        "C_Q4_Dependencies": 0,
+        "C_Q5_TribalStore": 0
+      },
+      "findings": [
+        "MEMORY.md / ADR / docs/decisions / .codex memories 부재 — tribal knowledge 외부화 store 없음",
+        "Cross-module dependencies 섹션이 절반 이상 module에서 누락",
+        "Common modification patterns 섹션 누락"
+      ]
+    },
+    "D": {
+      "name": "Cross-Module Dependency Mapping",
+      "score": 9,
+      "max": 15,
+      "evidence": {
+        "architecture_doc": true,
+        "mermaid_diagrams": true,
+        "context_with_deps_section": 0,
+        "monorepo_workspace": false
+      },
+      "sub_scores": {},
+      "findings": [
+        "어떤 context file에도 cross-module dependency 섹션 없음"
+      ]
+    },
+    "E": {
+      "name": "Verification & Quality Gates",
+      "score": 8,
+      "max": 15,
+      "evidence": {
+        "ref_total": 57,
+        "ref_broken": 2,
+        "codeowners": false,
+        "pr_template": true,
+        "ci_workflows": true,
+        "husky": false,
+        "evals_dir": false
+      },
+      "sub_scores": {
+        "E1_RefAccuracy": 5,
+        "E2_CriticReview": 2,
+        "E3_TaskValidation": 1,
+        "E4_PromptTests": 0
+      },
+      "findings": [
+        "hallucinated path 2건 (총 57 참조 중) — 예: README.md: 8080/swagger-ui.html, docs/logs/README.md: ./rules/workflow.md",
+        "agent eval / prompt test 디렉터리 없음 — AI 회귀 catch 없음"
+      ]
+    },
+    "F": {
+      "name": "Freshness & Self-Maintenance",
+      "score": 8,
+      "max": 10,
+      "evidence": {
+        "drifted_modules": 0,
+        "measurable_modules": 2,
+        "drift_ratio": 0.0,
+        "ctx_validation_workflow": true,
+        "hook_validates_paths": false
+      },
+      "sub_scores": {},
+      "findings": [
+        "pre-commit / pre-push hook에 path 검증 없음"
+      ]
+    },
+    "G": {
+      "name": "Agent Performance Outcomes",
+      "score": 0,
+      "max": 5,
+      "evidence": {
+        "eval_dirs": [],
+        "metric_files": [],
+        "telemetry_hint": false
+      },
+      "sub_scores": {},
+      "findings": [
+        "agent eval / benchmark 디렉터리·결과 파일 부재 — 성능 측정 인프라 없음",
+        "AI usage telemetry 단서 없음 (Codex session log / OpenTelemetry)"
+      ]
+    }
+  },
+  "insights": [
+    "총점 52/100 · 등급 AI-Fragile",
+    "가장 낮은 카테고리: C Tribal Knowledge Externalization 0/20",
+    "가장 낮은 카테고리: G Agent Performance Outcomes 0/5",
+    "⚠️  context에 hallucinated path 2건 — Meta 기준으로는 0이어야 함"
+  ],
+  "actions": [
+    {
+      "title": "context의 hallucinated path 2건 수정 (referential trust)",
+      "category": "E",
+      "effort": "S",
+      "effort_hours": 0.5,
+      "impact": "agent의 잘못된 path-following 방지 — stale = worse than missing",
+      "impact_score": 10,
+      "priority": 20.0
+    },
+    {
+      "title": "과도한 AGENTS.md/CODEX.md를 25-35 lines로 압축 (compass-not-encyclopedia)",
+      "category": "B",
+      "effort": "M",
+      "effort_hours": 2.0,
+      "impact": "agent context 로드 시간 단축 + 핵심 정보 가시성 ↑",
+      "impact_score": 7,
+      "priority": 3.5
+    },
+    {
+      "title": "MEMORY.md 또는 docs/adr/ 도입으로 tribal knowledge 외부화",
+      "category": "C",
+      "effort": "M",
+      "effort_hours": 3.0,
+      "impact": "senior 의존 의사결정 외부화 → 신규 agent run 시 오류 ↓",
+      "impact_score": 8,
+      "priority": 2.6666666666666665
+    },
+    {
+      "title": "evals/ 디렉터리 + 대표 task pass-rate 측정 도입",
+      "category": "G",
+      "effort": "L",
+      "effort_hours": 6.0,
+      "impact": "AI 회귀 측정 가능 — 개선 ROI 자체를 정량화",
+      "impact_score": 6,
+      "priority": 1.0
+    }
+  ],
+  "extras": {
+    "modules": [
+      {
+        "path": "/Users/han-yejin/IdeaProjects/coffee-order-system/scripts",
+        "rel": "scripts",
+        "code_files": 1,
+        "has_context": true,
+        "context_file": "/Users/han-yejin/IdeaProjects/coffee-order-system/scripts/AGENTS.md",
+        "context_kind": "AGENTS.md"
+      },
+      {
+        "path": "/Users/han-yejin/IdeaProjects/coffee-order-system/src",
+        "rel": "src",
+        "code_files": 50,
+        "has_context": true,
+        "context_file": "/Users/han-yejin/IdeaProjects/coffee-order-system/src/AGENTS.md",
+        "context_kind": "AGENTS.md"
+      }
+    ],
+    "large_files": [
+      {
+        "path": "src/test/java/com/example/coffee/domain/order/OrderIntegrationTest.java",
+        "lines": 436
+      }
+    ]
+  },
+  "manual_review": {
+    "adjusted_total": 76,
+    "adjusted_grade": "AI-Ready",
+    "reviewed_at": "2026-07-13",
+    "category_adjustments": {
+      "C": {
+        "auto_score": 0,
+        "adjusted_score": 16,
+        "reason": "ARCHITECTURE.md와 src/AGENTS.md가 모듈 책임, 변경 경로, 비자명한 트랜잭션 규칙, cross-module dependency를 외부화한다. 정식 ADR/decision store는 아직 없다."
+      },
+      "E": {
+        "auto_score": 8,
+        "adjusted_score": 13,
+        "reason": "실제 Markdown 링크와 context coverage가 PASS이고, PR 체크리스트, CI quality gate, Gradle/Testcontainers 34/34 성공, 대표 agent workflow 평가가 있다. 독립 리뷰 owner/다회 critic 체계는 없다."
+      },
+      "G": {
+        "auto_score": 0,
+        "adjusted_score": 3,
+        "reason": "docs/agent-evaluation.md에 대표 작업 3종의 pass-rate 3/3과 human intervention 0회를 기록했다. 반복 표본과 machine-readable history가 없어 5점은 아니다."
+      }
+    },
+    "reference_validation": {
+      "command": "python3 scripts/check-doc-context.py",
+      "markdown_links": "PASS",
+      "src_context_coverage": "100%",
+      "scorer_path_refs_total": 57,
+      "scorer_flagged": 2,
+      "actual_broken_refs": 0,
+      "false_positives": [
+        "README의 localhost Swagger URL",
+        "docs/logs/README.md의 문서 기준 상대링크"
+      ]
+    },
+    "test_validation": {
+      "command": "./gradlew clean test --console plain",
+      "tests": 34,
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0,
+      "result": "BUILD SUCCESSFUL"
+    },
+    "strengths": [
+      "src와 scripts 두 핵심 모듈 모두 AGENTS.md를 보유해 자동 navigation coverage 15/15를 달성했다.",
+      "src/AGENTS.md의 Java 경로가 실제 클릭 가능한 상대링크로 교정됐다.",
+      "ARCHITECTURE.md가 주문, 포인트, 랭킹, AFTER_COMMIT 외부 전송의 의존성과 회귀 범위를 시각화한다.",
+      "PR template와 GitHub Actions가 문서 검사 및 MySQL Testcontainers 전체 테스트를 자동 게이트로 실행한다.",
+      "대표 agent task 3종의 pass-rate 3/3과 추가 개입 0회를 기록했다."
+    ],
+    "curated_actions": [
+      {
+        "rank": 1,
+        "category": "G",
+        "effort": "M",
+        "hours": "2-3",
+        "title": "agent 평가 결과를 JSON으로 누적하고 동일 과제를 반복 측정",
+        "impact": "단일 3/3 표본을 추세 비교 가능한 성공률과 개입률로 전환"
+      },
+      {
+        "rank": 2,
+        "category": "C",
+        "effort": "M",
+        "hours": "2",
+        "title": "새로운 cross-cutting 결정부터 docs/decisions에 짧은 ADR로 기록",
+        "impact": "기존 문서 중복 없이 결정 시점, 대안, 채택 이유 보존"
+      },
+      {
+        "rank": 3,
+        "category": "F",
+        "effort": "S",
+        "hours": "0.5",
+        "title": "pre-push에서 check-doc-context.py를 실행하는 로컬 빠른 피드백 추가",
+        "impact": "CI까지 기다리지 않고 stale link와 context 누락 차단"
+      },
+      {
+        "rank": 4,
+        "category": "B",
+        "effort": "S",
+        "hours": "0.5",
+        "title": "AGENTS.md에서 핵심 검증 명령으로 직접 연결",
+        "impact": "제출용 README를 유지하면서 command discovery 개선"
+      },
+      {
+        "rank": 5,
+        "category": "E",
+        "effort": "M",
+        "hours": "1-2",
+        "title": "CODEOWNERS 또는 독립 reviewer 규칙은 팀 운영 필요가 생길 때만 도입",
+        "impact": "불필요한 절차 없이 실제 협업 시점에 critic gate 강화"
+      }
+    ],
+    "note": "자동 점수 52점은 원본 scorer 결과로 보존한다. 보정 점수는 현재 실파일, 정적 검사, 전체 테스트와 agent 평가 문서를 근거로 추가했다."
+  }
+}
