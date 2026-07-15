@@ -1,6 +1,6 @@
-# 아키텍처와 도메인 흐름
+# 컨텍스트 맵: 도메인 흐름과 변경 영향
 
-이 문서는 여러 도메인에 걸친 변경의 영향 범위를 찾기 위한 지도입니다. API 계약은 [`docs/api-spec.md`](docs/api-spec.md), 불변식과 미확정 정책은 [`docs/rules/policy.md`](docs/rules/policy.md)를 기준으로 합니다.
+이 문서는 여러 도메인에 걸친 변경의 영향 범위를 찾기 위한 지도입니다. API 계약은 [`api-spec.md`](api-spec.md), 불변식과 미확정 정책은 [`rules/policy.md`](rules/policy.md)를 기준으로 합니다.
 
 ## 모듈 책임
 

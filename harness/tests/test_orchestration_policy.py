@@ -56,37 +56,42 @@ class OrchestrationPolicyTest(unittest.TestCase):
                 "PR_REVIEW",
                 "FIX_LOOP",
                 "FINAL_EVALUATE",
-                "HUMAN_REVIEW",
-                "HUMAN_MERGE",
+                "FAILED",
+                "AUTO_MERGE",
             ],
             self.policy["stateMachine"]["states"],
         )
+        self.assertNotIn("HUMAN_REVIEW", self.policy["stateMachine"]["states"])
+        self.assertNotIn("HUMAN_MERGE", self.policy["stateMachine"]["states"])
 
-    def test_main_and_merge_authority_are_separate(self) -> None:
+    def test_main_orchestrator_owns_automatic_merge(self) -> None:
         main = self.policy["mainOrchestrator"]
         merge_guard = self.policy["stateMachine"]["mergeGuard"]
 
+        self.assertTrue(self.policy["scope"]["externalServices"])
         self.assertFalse(main["canWriteProductFiles"])
-        self.assertFalse(main["canMerge"])
-        self.assertEqual("user", main["mergeActor"])
-        self.assertEqual("user", merge_guard["actor"])
-        self.assertFalse(merge_guard["mainOrchestratorMayMerge"])
+        self.assertTrue(main["canMerge"])
+        self.assertEqual("main-orchestrator", main["mergeActor"])
+        self.assertEqual("scripts/agent-publish.py", main["providerRuntime"])
+        self.assertEqual("main-orchestrator", merge_guard["actor"])
+        self.assertTrue(merge_guard["mainOrchestratorMayMerge"])
         self.assertEqual(
-            ["HUMAN_REVIEW"],
+            ["FAILED"],
             self.policy["stateMachine"]["nonMergeTerminalStates"],
         )
+        self.assertNotIn("MERGE", main["mustNotPerform"])
 
-    def test_exhausted_repair_loop_stops_for_human_review(self) -> None:
+    def test_exhausted_repair_loop_stops_without_merge(self) -> None:
         transitions = self.policy["stateMachine"]["transitions"]
 
-        self.assertEqual("HUMAN_REVIEW", transitions["FAIL"]["exhaustedTo"])
+        self.assertEqual("FAILED", transitions["FAIL"]["exhaustedTo"])
         self.assertEqual(
-            "HUMAN_REVIEW",
+            "FAILED",
             next(
                 transition["to"]
                 for transition in transitions["repair"]
                 if transition["from"] == "FIX_LOOP"
-                and transition["to"] == "HUMAN_REVIEW"
+                and transition["to"] == "FAILED"
             ),
         )
 

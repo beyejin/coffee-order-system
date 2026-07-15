@@ -305,6 +305,19 @@ class StateAndPlanTest(unittest.TestCase):
         self.assertEqual("main", plan.target_branch)
         self.assertEqual(hashlib.sha256(raw).hexdigest(), plan.plan_hash)
 
+    def test_parse_plan_accepts_readable_issue_manifest_path(self) -> None:
+        plan = HARNESS.parse_plan(
+            valid_plan_bytes(),
+            "harness/plans/issue-123-concurrency-test.json",
+            KNOWN_RISKS,
+        )
+
+        self.assertEqual(123, plan.issue)
+        self.assertEqual(
+            "harness/plans/issue-123-concurrency-test.json",
+            plan.relative_path,
+        )
+
     def test_parse_plan_rejects_duplicate_top_level_key(self) -> None:
         raw = valid_plan_bytes().replace(
             b'"issue": 123',
@@ -419,12 +432,16 @@ class StateAndPlanTest(unittest.TestCase):
                 self.assertEqual("plan.schema", raised.exception.check_id)
 
     def test_plan_path_must_match_issue_number(self) -> None:
-        with self.assertRaisesRegex(HARNESS.HarnessViolation, "plan 경로"):
-            HARNESS.parse_plan(
-                valid_plan_bytes(),
-                "harness/plans/124.json",
-                KNOWN_RISKS,
-            )
+        for path in (
+            "harness/plans/124.json",
+            "harness/plans/issue-124-concurrency-test.json",
+            "harness/plans/issue-123.json",
+        ):
+            with self.subTest(path=path), self.assertRaisesRegex(
+                HARNESS.HarnessViolation,
+                "plan 경로",
+            ):
+                HARNESS.parse_plan(valid_plan_bytes(), path, KNOWN_RISKS)
 
     def test_broad_src_glob_requires_replan(self) -> None:
         payload = json.loads(valid_plan_bytes())
@@ -2177,8 +2194,8 @@ class DocumentationTest(unittest.TestCase):
         readme = (root / "harness/README.md").read_text(encoding="utf-8")
         agents = (root / "AGENTS.md").read_text(encoding="utf-8")
         for command in (
-            "python3 scripts/agent-harness.py prepare harness/plans/<issue>.json",
-            "python3 scripts/agent-harness.py evaluate harness/plans/<issue>.json",
+            "python3 scripts/agent-harness.py prepare harness/plans/issue-<issue>-<slug>.json",
+            "python3 scripts/agent-harness.py evaluate harness/plans/issue-<issue>-<slug>.json",
         ):
             self.assertIn(command, readme)
         self.assertEqual(
@@ -2187,6 +2204,14 @@ class DocumentationTest(unittest.TestCase):
                 r"python3 scripts/agent-harness\.py (\S+)",
                 readme,
             ),
+        )
+        self.assertIn(
+            "python3 scripts/agent-publish.py harness/plans/issue-<issue>-<slug>.json",
+            readme,
+        )
+        self.assertIn(
+            "python3 scripts/agent-publish.py harness/plans/issue-<issue>-<slug>.json --merge",
+            readme,
         )
         for state in HARNESS.State:
             self.assertIn(f"| {state.name} | {state.value} |", readme)

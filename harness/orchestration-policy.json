@@ -6,9 +6,9 @@
     "unit": "one-github-issue",
     "oneBranchPerIssue": true,
     "onePrPerIssue": true,
-    "externalServices": false,
+    "externalServices": true,
     "agentSpawningRuntime": false,
-    "mergeActor": "user"
+    "mergeActor": "main-orchestrator"
   },
   "roleSlots": {
     "maxPerIssue": 4,
@@ -90,18 +90,19 @@
       "MANIFEST",
       "ASSIGN",
       "RETRY",
-      "FINAL_EVALUATE"
+      "FINAL_EVALUATE",
+      "AUTO_MERGE"
     ],
     "mustNotPerform": [
       "IMPLEMENT",
       "VERIFY",
       "QA",
-      "PR_REVIEW",
-      "MERGE"
+      "PR_REVIEW"
     ],
     "canWriteProductFiles": false,
-    "canMerge": false,
-    "mergeActor": "user"
+    "canMerge": true,
+    "mergeActor": "main-orchestrator",
+    "providerRuntime": "scripts/agent-publish.py"
   },
   "stateMachine": {
     "states": [
@@ -113,11 +114,11 @@
       "PR_REVIEW",
       "FIX_LOOP",
       "FINAL_EVALUATE",
-      "HUMAN_REVIEW",
-      "HUMAN_MERGE"
+      "FAILED",
+      "AUTO_MERGE"
     ],
-    "terminalState": "HUMAN_MERGE",
-    "nonMergeTerminalStates": ["HUMAN_REVIEW"],
+    "terminalState": "AUTO_MERGE",
+    "nonMergeTerminalStates": ["FAILED"],
     "transitions": {
       "forward": [
         {
@@ -150,7 +151,7 @@
         },
         {
           "from": "FINAL_EVALUATE",
-          "to": "HUMAN_MERGE",
+          "to": "AUTO_MERGE",
           "when": "FINAL_EVALUATE == PASS"
         }
       ],
@@ -167,8 +168,8 @@
         },
         {
           "from": "FIX_LOOP",
-          "to": "HUMAN_REVIEW",
-          "when": "repair loop limit exhausted; do not merge"
+          "to": "FAILED",
+          "when": "repair loop limit exhausted; stop without merge"
         }
       ],
       "FAIL": {
@@ -181,7 +182,7 @@
         ],
         "to": "FIX_LOOP",
         "when": "deterministic failure or blocking finding while repairLoops < limits.maxRepairLoops",
-        "exhaustedTo": "HUMAN_REVIEW"
+        "exhaustedTo": "FAILED"
       },
       "BLOCKED": {
         "from": [
@@ -195,7 +196,7 @@
           "FINAL_EVALUATE"
         ],
         "to": "PLAN",
-        "requires": "human resolves the blocker before restart"
+        "requires": "automation resolves the blocker before restart"
       },
       "REPLAN_REQUIRED": {
         "from": [
@@ -209,19 +210,19 @@
           "FINAL_EVALUATE"
         ],
         "to": "PLAN",
-        "requires": "human reviews scope and manifest before assignment"
+        "requires": "automation regenerates the manifest before assignment"
       }
     },
     "mergeGuard": {
-      "entry": "HUMAN_MERGE",
+      "entry": "AUTO_MERGE",
       "requires": [
         "FINAL_EVALUATE == PASS",
         "candidateHead equals evaluated HEAD",
         "changed paths are within manifest.allowedPaths",
         "required handoffs conform to handoffSchema"
       ],
-      "actor": "user",
-      "mainOrchestratorMayMerge": false
+      "actor": "main-orchestrator",
+      "mainOrchestratorMayMerge": true
     }
   },
   "singleSourceOfTruth": {
@@ -233,7 +234,7 @@
       "handoffSchema"
     ],
     "bindings": {
-      "manifest": "harness/plans/{issue}.json",
+      "manifest": "harness/plans/issue-{issue}-<slug>.json (legacy numeric path accepted)",
       "candidateHead": "current candidate branch HEAD",
       "allowedPaths": "manifest.allowedPaths",
       "completionContract": "manifest.acceptanceCriteria + completionContract.requiredEvidence",
@@ -254,7 +255,7 @@
       "candidateHead equals evaluated HEAD",
       "changed paths are within manifest.allowedPaths",
       "handoffs conform to handoffSchema",
-      "user is the merge actor"
+      "main-orchestrator is the merge actor"
     ]
   },
   "handoffSchema": {

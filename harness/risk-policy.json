@@ -21,7 +21,9 @@
         "harness/risk-policy.json",
         "harness/orchestration-policy.json",
         "harness/tests/test_agent_harness.py",
-        "scripts/agent-harness.py"
+        "harness/tests/test_agent_publish.py",
+        "scripts/agent-harness.py",
+        "scripts/agent-publish.py"
       ],
       "risks": [
         "scope",
@@ -90,7 +92,7 @@
     {
       "id": "architecture-document",
       "patterns": [
-        "ARCHITECTURE.md"
+        "docs/context-map.md"
       ],
       "risks": [
         "architecture"

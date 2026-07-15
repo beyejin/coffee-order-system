@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""로컬 Markdown 링크와 src/ AGENTS.md 커버리지를 검증한다."""
+"""로컬 Markdown 링크와 루트 AGENTS.md 소스 컨텍스트 커버리지를 검증한다."""
 
 from __future__ import annotations
 
@@ -61,9 +61,11 @@ def source_files_without_context() -> list[str]:
 	for source in sorted(path for path in source_root.rglob("*") if path.suffix in SOURCE_SUFFIXES):
 		parent = source.parent
 		covered = False
-		while parent == source_root or source_root in parent.parents:
+		while True:
 			if (parent / "AGENTS.md").is_file():
 				covered = True
+				break
+			if parent == ROOT:
 				break
 			parent = parent.parent
 		if not covered:
@@ -83,11 +85,11 @@ def main() -> int:
 		print("[PASS] 로컬 Markdown 링크")
 
 	if uncovered_sources:
-		print("[FAIL] AGENTS.md 컨텍스트가 없는 src 파일")
+		print("[FAIL] 루트 AGENTS.md 컨텍스트가 없는 src 파일")
 		for source in uncovered_sources:
 			print(f"- {source}")
 	else:
-		print("[PASS] src 컨텍스트 커버리지 100%")
+		print("[PASS] 루트 AGENTS.md 소스 컨텍스트 커버리지 100%")
 
 	return 1 if broken_links or uncovered_sources else 0
 

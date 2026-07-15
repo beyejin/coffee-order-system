@@ -130,7 +130,7 @@ erDiagram
 5. 외부 API 지연·실패를 재현한 뒤 전송 방식의 트레이드오프를 확정합니다.
 6. 인기 메뉴는 Redis ZSET의 기간 경계·커밋 후 반영·장애 fallback과 MySQL 집계의 실행 계획을 함께 검증합니다.
 
-기능은 `Plan → Issue → Branch → Generate → Evaluate → Explain` 순서로 진행합니다. Plan과 완료 조건으로 GitHub 이슈를 만든 뒤 이슈 전용 브랜치에서 구현하며, 코드가 동작해도 설계 이유와 실패 시 동작을 설명하지 못하면 완료로 처리하지 않습니다.
+기능은 `Plan → Issue → Branch → Manifest → Prepare → Generate → Evaluate → Explain → Publish` 순서로 진행합니다. 새 manifest는 `harness/plans/issue-<issue>-<slug>.json`을 사용하고, `python3 scripts/agent-publish.py ...`가 최신 `PASS`를 확인한 뒤 Ready PR과 `Closes #<issue>`를 연결합니다. `--merge`를 명시한 경우에만 required checks, PR `MERGED`, 이슈 `CLOSED`까지 확인합니다.
 
 ## 기술 선택
 
@@ -161,6 +161,7 @@ erDiagram
 ## 문서
 
 - [설계 의도·문제 해결 전략](docs/strategy.md)
+- [도메인 흐름 컨텍스트 맵](docs/context-map.md)
 - [테이블 명세](docs/table-spec.md)
 - [API 명세](docs/api-spec.md)
 - [도메인 정책](docs/rules/policy.md)

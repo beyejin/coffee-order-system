@@ -198,6 +198,12 @@ PLAN_LOCK_FIELDS = frozenset(
 BRANCH_PATTERN = re.compile(
     r"^(feature|fix|refactor|docs)/([1-9][0-9]*)-([a-z0-9]+(?:-[a-z0-9]+)*)$"
 )
+LEGACY_PLAN_PATH_PATTERN = re.compile(
+    r"^harness/plans/([1-9][0-9]*)\.json$"
+)
+READABLE_PLAN_PATH_PATTERN = re.compile(
+    r"^harness/plans/issue-([1-9][0-9]*)-[a-z0-9]+(?:-[a-z0-9]+)*\.json$"
+)
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 PLAN_HASH_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 REQUIRED_PREFLIGHT_CHECK_IDS = frozenset(
@@ -323,6 +329,14 @@ def validate_plan_pattern(pattern: str) -> None:
     _validate_repository_pattern(pattern, "plan.schema")
 
 
+def plan_path_matches_issue(relative_path: str, issue: int) -> bool:
+    for pattern in (LEGACY_PLAN_PATH_PATTERN, READABLE_PLAN_PATH_PATTERN):
+        match = pattern.fullmatch(relative_path)
+        if match is not None:
+            return int(match.group(1)) == issue
+    return False
+
+
 def _validate_repository_pattern(pattern: str, check_id: str) -> None:
     body = pattern[:-3] if pattern.endswith("/**") else pattern
     segments = body.split("/")
@@ -419,12 +433,12 @@ def parse_plan(
             "targetBranch는 main이어야 합니다.",
         )
 
-    expected_path = f"harness/plans/{issue}.json"
-    if relative_path != expected_path:
+    if not plan_path_matches_issue(relative_path, issue):
         raise _violation(
             State.FAIL,
             "plan.path",
-            f"plan 경로는 {expected_path}여야 합니다.",
+            "plan 경로는 harness/plans/{issue}.json 또는 "
+            "harness/plans/issue-{issue}-<slug>.json이어야 합니다.",
         )
 
     objective = _non_empty_string(payload["objective"], "objective")
@@ -1325,9 +1339,10 @@ def load_plan_lock(path: Path) -> PlanLock:
     base_tip_sha = _lock_string(payload["baseTipSha"], "baseTipSha")
     merge_base_sha = _lock_string(payload["mergeBaseSha"], "mergeBaseSha")
 
-    if plan_path != f"harness/plans/{issue}.json":
+    if not plan_path_matches_issue(plan_path, issue):
         raise _plan_lock_error(
-            f"planPath는 harness/plans/{issue}.json이어야 합니다."
+            "planPath는 harness/plans/{issue}.json 또는 "
+            "harness/plans/issue-{issue}-<slug>.json이어야 합니다."
         )
     if target_branch != "main":
         raise _plan_lock_error("targetBranch는 main이어야 합니다.")

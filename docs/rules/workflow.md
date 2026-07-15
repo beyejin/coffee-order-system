@@ -1,6 +1,6 @@
 # 개발·검증 흐름
 
-읽기 전용 질의를 제외하고 저장소를 변경하는 모든 작업은 `Plan → Issue → Branch → Manifest → Prepare → Generate → Verify → Commit → Evaluate → Publish → Explain` 순서로 진행합니다. 상태 관리는 이 문서에서, machine-readable 범위는 `harness/plans/{issue}.json`에서, 실제 시도와 증거는 `docs/logs/{기능}.md`에서 관리합니다.
+읽기 전용 질의를 제외하고 저장소를 변경하는 모든 작업은 `Plan → Issue → Branch → Manifest → Prepare → Generate → Verify → Commit → Evaluate → Publish → Explain` 순서로 진행합니다. 상태 관리는 이 문서에서, machine-readable 범위는 `harness/plans/issue-{issue}-<slug>.json`에서, 실제 시도와 증거는 `docs/logs/{기능}.md`에서 관리합니다. 기존 `harness/plans/{issue}.json`은 하위 호환으로 읽습니다.
 
 ## 작업 순서
 
@@ -36,13 +36,13 @@
 
 ## Manifest
 
-- plan 외 저장소 파일보다 먼저 `harness/plans/{issue}.json`을 작성합니다.
+- plan 외 저장소 파일보다 먼저 `harness/plans/issue-{issue}-<slug>.json`을 작성합니다. 숫자만 있는 `harness/plans/{issue}.json`은 기존 manifest 호환용입니다.
 - objective, allowedPaths, acceptanceCriteria, declaredRisks, contractChanges, nonGoals를 기록합니다.
 - 범위나 위험이 바뀌면 manifest를 자동 확대하지 않고 REPLAN_REQUIRED로 돌아갑니다.
 
 ## Prepare
 
-- 최신 `origin/main`의 clean worktree에서 `python3 scripts/agent-harness.py prepare harness/plans/{issue}.json`을 실행합니다.
+- 최신 `origin/main`의 clean worktree에서 `python3 scripts/agent-harness.py prepare harness/plans/issue-{issue}-<slug>.json`을 실행합니다.
 - 선택한 plan 외 dirty 경로, branch·issue 불일치, base 확인 실패, Python·Java 17·Docker 환경 부재를 PASS로 처리하지 않습니다.
 - prepare가 `PASS=0`일 때만 allowedPaths 안의 파일을 변경합니다.
 
@@ -67,10 +67,10 @@
 
 ## Evaluate
 
-- 최종 커밋 HEAD에서 `python3 scripts/agent-harness.py evaluate harness/plans/{issue}.json`을 실행합니다.
+- 최종 커밋 HEAD에서 `python3 scripts/agent-harness.py evaluate harness/plans/issue-{issue}-<slug>.json`을 실행합니다.
 - evaluate 시작과 종료 시 작업 폴더가 clean하지 않으면 `REPLAN_REQUIRED`의 `git.clean`으로 중단합니다.
 - 상태는 `PASS=0`, `FAIL=1`, `BLOCKED=2`, `REPLAN_REQUIRED=3`입니다.
-- FAIL은 최소 수정 뒤 다시 검증하고, BLOCKED는 환경이나 oracle을 준비하며, REPLAN_REQUIRED는 manifest와 사람의 범위 검토로 돌아갑니다.
+- FAIL은 최소 수정 뒤 다시 검증하고, BLOCKED는 자동 실행기가 환경이나 oracle을 준비하며, REPLAN_REQUIRED는 manifest를 갱신한 뒤 Plan으로 돌아갑니다.
 - 현재 base tip·merge-base·HEAD·plan·diff에 연결된 PASS evidence만 완료 근거입니다.
 - 성공을 추측하지 않고 실제 명령 결과를 확인합니다.
 - 실패와 성공을 모두 기능 로그의 `Attempt`에 추가합니다.
@@ -97,7 +97,7 @@
 5. 다른 후보 대신 이 전략을 선택한 근거는 무엇인가?
 6. 테스트·SQL·실행 결과로 어떻게 증명했는가?
 
-검증이 끝난 변경은 pull request로만 `main`에 병합합니다. 기본 완료 조건은 현재 HEAD에 연결된 PASS evidence와 Ready for review PR URL입니다. issue #4의 일회성 Publish 예외만 [`harness/README.md`](../../harness/README.md)에 따르며, 후속 Phase 1B와 일반 작업은 required checks를 모두 통과해야 합니다.
+검증이 끝난 변경은 `python3 scripts/agent-publish.py harness/plans/issue-{issue}-<slug>.json`으로 branch를 push하고 Ready PR을 생성·갱신합니다. 이 명령은 `Closes #{issue}` 연결과 최신 `evaluate PASS`를 확인합니다. 명시적으로 `--merge`를 붙인 경우에만 required checks를 기다리고 PR을 병합한 뒤 PR이 `MERGED`, 이슈가 `CLOSED`인지 확인합니다. 후속 Phase 1B와 일반 작업은 required checks를 모두 통과해야 합니다.
 
 ## 기능 로그
 
