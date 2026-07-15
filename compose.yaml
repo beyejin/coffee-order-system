@@ -16,16 +16,33 @@ services:
     volumes:
       - coffee_mysql_data:/var/lib/mysql
 
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - coffee_redis_data:/data
+
   app1:
     build: .
     environment:
       DB_URL: jdbc:mysql://mysql:3306/coffee?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
       DB_USERNAME: root
       DB_PASSWORD: ${DB_PASSWORD:-12345678}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       JAVA_TOOL_OPTIONS: -Duser.timezone=UTC
       TZ: UTC
     depends_on:
       mysql:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     expose:
       - "8080"
@@ -42,10 +59,14 @@ services:
       DB_URL: jdbc:mysql://mysql:3306/coffee?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
       DB_USERNAME: root
       DB_PASSWORD: ${DB_PASSWORD:-12345678}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       JAVA_TOOL_OPTIONS: -Duser.timezone=UTC
       TZ: UTC
     depends_on:
       mysql:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     expose:
       - "8080"
@@ -76,3 +97,4 @@ services:
 
 volumes:
   coffee_mysql_data:
+  coffee_redis_data:

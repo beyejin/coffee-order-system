@@ -6,7 +6,7 @@
 - 이름: 응답에는 현재 `menu.name`을 사용한다.
 - 검증: 시작 경계 포함, 종료 경계 제외, 오래된 주문 제외, 동률, top 3, 빈 결과와 3개 미만 결과를 MySQL 통합 테스트로 확인한다.
 - 성능 증거: `(created_at, menu_id)` 인덱스 컬럼 순서를 `SHOW INDEX`로 확인하고 실제 집계 SQL의 `EXPLAIN` 결과를 기록한다. 소량 데이터에서 특정 key 선택은 강제하지 않는다.
-- 범위 제외: 캐시, Redis, 사전 집계 테이블은 추가하지 않는다.
+- Redis 적용 계획: MySQL을 정본으로 유지하고, 주문 커밋 후 menu별 Redis ZSET에 주문 시각을 저장해 최근 7일 count read model로 사용한다. Redis 오류 시 기존 MySQL 집계로 fallback한다.
 
 ## Attempt 1 — 2026-07-12 ✅ PASS
 - 결과: `./gradlew clean test --console plain` 성공, 기존 메뉴·포인트·주문 회귀를 포함한 전체 27개 테스트가 통과했다.
