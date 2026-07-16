@@ -62,7 +62,6 @@ class RiskPolicy:
     rules: tuple[RiskRule, ...]
     protected_patterns: tuple[str, ...]
     risk_checks: Mapping[str, tuple[str, ...]]
-    implemented_checks: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -179,7 +178,6 @@ POLICY_FIELDS = frozenset(
         "rules",
         "protectedPatterns",
         "riskChecks",
-        "implementedChecks",
     }
 )
 RULE_FIELDS = frozenset({"id", "patterns", "risks"})
@@ -615,35 +613,12 @@ def load_risk_policy(path: Path) -> RiskPolicy:
         all_check_ids.update(checks)
         risk_checks[risk] = checks
 
-    implemented_check_values = policy_string_array(
-        payload["implementedChecks"],
-        "implementedChecks",
-    )
-    unknown_implemented_checks = set(implemented_check_values) - all_check_ids
-    if unknown_implemented_checks:
-        raise policy_error(
-            "implementedChecks에 riskChecks에 없는 값이 있습니다: "
-            f"{sorted(unknown_implemented_checks)}"
-        )
-    runtime_check_ids = (
-        set(INLINE_CHECK_IDS)
-        | {"harness.unit", "gradle.test"}
-        | set(DOMAIN_ORACLE_CHECK_IDS)
-    )
-    unsupported_runtime_checks = set(implemented_check_values) - runtime_check_ids
-    if unsupported_runtime_checks:
-        raise policy_error(
-            "implementedChecks에 실행기가 없는 값이 있습니다: "
-            f"{sorted(unsupported_runtime_checks)}"
-        )
-
     return RiskPolicy(
         schema_version=schema_version,
         known_risks=known_risks,
         rules=tuple(rules),
         protected_patterns=protected_patterns,
         risk_checks=risk_checks,
-        implemented_checks=frozenset(implemented_check_values),
     )
 
 

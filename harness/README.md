@@ -34,6 +34,7 @@
 ## 도메인 oracle
 
 다음 check는 `scripts/harness-oracles.py`가 실행하며, 미구현 상태를 PASS로 대체하지 않습니다.
+Gradle 기반 테스트는 기본 gate의 `gradle.test`에서 전체를 한 번 실행하고, oracle는 정적 경계와 대상 테스트 소스를 확인합니다.
 
 - `oracle.architecture`: Java import 경계와 순환 의존성
 - `oracle.api-contract`: controller route, 공통 응답·오류 contract, API 회귀 테스트

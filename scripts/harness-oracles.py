@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from http import HTTPStatus
 import os
 import re
 import socket
@@ -26,7 +27,7 @@ ORACLE_IDS = (
     "oracle.multi-instance",
 )
 
-GRADLE_TESTS = {
+ORACLE_TESTS = {
     "oracle.api-contract": (
         "com.example.coffee.domain.menu.MenuControllerTest",
         "com.example.coffee.domain.point.PointChargeIntegrationTest",
@@ -47,11 +48,6 @@ GRADLE_TESTS = {
     ),
 }
 
-HTTP_STATUS_NAMES = {
-    "BAD_REQUEST": 400,
-    "NOT_FOUND": 404,
-    "CONFLICT": 409,
-}
 JAVA_IMPORT_PATTERN = re.compile(
     r"^\s*import\s+(com\.example\.coffee\.[\w.]+);",
     re.MULTILINE,
@@ -285,7 +281,8 @@ def validate_api_contract(root: Path) -> str:
         )
         if status_match is None:
             raise OracleFailure(f"ErrorCode에 계약된 code가 없습니다: {code}")
-        if HTTP_STATUS_NAMES.get(status_match.group(1)) != status:
+        http_status = HTTPStatus.__members__.get(status_match.group(1))
+        if http_status is None or http_status.value != status:
             raise OracleFailure(f"ErrorCode status가 계약과 다릅니다: {code}")
         if f"`{code}`" not in documentation_text:
             raise OracleFailure(f"API 문서에 error code가 없습니다: {code}")
@@ -312,12 +309,12 @@ def validate_migration_sequence(root: Path) -> str:
     return f"migration sequence PASS: V1..V{max(versions)}"
 
 
-def _gradle_command(test_classes: Sequence[str]) -> tuple[str, ...]:
-    command: list[str] = ["./gradlew", "test"]
+def validate_test_sources(root: Path, check_id: str) -> str:
+    test_classes = ORACLE_TESTS[check_id]
     for test_class in test_classes:
-        command.extend(("--tests", test_class))
-    command.extend(("--console", "plain"))
-    return tuple(command)
+        relative_path = f"src/test/java/{test_class.replace('.', '/')}.java"
+        _require_file(root, relative_path)
+    return f"{check_id} test source PASS: {len(test_classes)}개 test class"
 
 
 def _run_command(
@@ -350,16 +347,6 @@ def _run_command(
     return completed.returncode, output
 
 
-def run_gradle_oracle(root: Path, check_id: str) -> int:
-    command = _gradle_command(GRADLE_TESTS[check_id])
-    exit_code, output = _run_command(root, command)
-    print(output, end="")
-    if exit_code != 0:
-        return exit_code
-    print(f"ORACLE PASS: {check_id}")
-    return 0
-
-
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
         server.bind(("127.0.0.1", 0))
@@ -385,7 +372,6 @@ def run_multi_instance_oracle(root: Path) -> int:
         "GATEWAY_URL": f"http://127.0.0.1:{gateway_port}",
     }
     compose = ("docker", "compose", "-p", project)
-    failure: OracleFailure | None = None
     try:
         exit_code, output = _run_command(root, (*compose, "config", "--quiet"), environment=environment)
         print(output, end="")
@@ -413,9 +399,6 @@ def run_multi_instance_oracle(root: Path) -> int:
             return exit_code
         print("ORACLE PASS: oracle.multi-instance")
         return 0
-    except OracleFailure as error:
-        failure = error
-        raise
     finally:
         exit_code, output = _run_command(
             root,
@@ -424,7 +407,7 @@ def run_multi_instance_oracle(root: Path) -> int:
             timeout_seconds=180,
         )
         print(output, end="")
-        if exit_code != 0 and failure is None:
+        if exit_code != 0:
             raise OracleFailure(f"multi-instance cleanup 실패(exit={exit_code})")
 
 
@@ -434,19 +417,15 @@ def run_oracle(root: Path, check_id: str) -> int:
         return 0
     if check_id == "oracle.api-contract":
         print(validate_api_contract(root))
-        return run_gradle_oracle(root, check_id)
+        print(validate_test_sources(root, check_id))
+        return 0
     if check_id == "oracle.migration-fresh":
         print(validate_migration_sequence(root))
-        return run_gradle_oracle(root, check_id)
-    if check_id == "oracle.migration-upgrade":
-        _require_file(root, "src/test/java/com/example/coffee/MigrationUpgradeTest.java")
-        return run_gradle_oracle(root, check_id)
-    if check_id in {
-        "oracle.transaction",
-        "oracle.cross-domain-concurrency",
-        "oracle.async-isolation",
-    }:
-        return run_gradle_oracle(root, check_id)
+        print(validate_test_sources(root, check_id))
+        return 0
+    if check_id in ORACLE_TESTS:
+        print(validate_test_sources(root, check_id))
+        return 0
     if check_id == "oracle.multi-instance":
         return run_multi_instance_oracle(root)
     raise OracleFailure(f"지원하지 않는 oracle입니다: {check_id}")
