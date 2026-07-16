@@ -32,6 +32,21 @@ issue의 writer는 `1`개만 허용한다.
 reviewer는 고정 handoff schema로 `PASS` 또는 `REJECT`를 반환하고, `REJECT`이면
 blocking finding을 함께 남긴다.
 
+## VCS capability matrix
+
+다음 표는 다섯 actor가 이 workflow에서 수행할 수 있는 VCS 작업을 정의한다.
+
+| actor | repo read | product file write | local commit | branch push | PR merge |
+|---|---:|---:|---:|---:|---:|
+| `implementation` | Yes | Yes (`manifest.allowedPaths`) | Yes | No | No |
+| `verification` | Yes | No | No | No | No |
+| `qa` | Yes | No | No | No | No |
+| `pr-review` | Yes | No | No | No | No |
+| `main-orchestrator` | Yes | No | No | Yes | Yes |
+
+JSON의 `vcsCapabilities`는 workflow capability contract를 설명한다. 실제 GitHub
+credentials는 branch push와 PR merge를 포함한 최종 enforcement layer로 남는다.
+
 ## 2. main orchestrator의 자동 merge 권한
 
 main orchestrator가 맡는 일은 다음 일곱 가지뿐이다.

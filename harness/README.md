@@ -20,7 +20,11 @@
 - repair loop 한도에 도달하면 `FAILED`에서 종료하며 자동으로 PASS나 merge를 만들지 않습니다.
 - main orchestrator는 현재 HEAD에서 최종 `evaluate`를 다시 실행하고, merge guard 조건을 모두 만족하면 자동으로 병합합니다.
 
-로컬 `agent-harness.py`는 범위와 완료 증거를 판정하고, `scripts/agent-publish.py`가 그 결과를 확인해 branch push와 Ready PR 생성을 실행합니다. `--merge`를 명시한 경우에만 required checks를 기다린 뒤 PR을 병합하고 PR `MERGED`·이슈 `CLOSED`를 검증합니다. 검증 PASS를 우회하거나 실패 결과를 자동으로 병합하는 경로는 없습니다.
+로컬 `agent-harness.py`는 범위와 완료 증거를 판정하고, clean HEAD에서
+`evaluate`가 PASS한 뒤 `scripts/agent-publish.py`가 main orchestrator의 branch
+push와 Ready PR 생성, `--merge`를 지정한 경우의 optional merge 경로를 실행합니다.
+이때 required checks를 기다린 뒤 PR을 병합하고 PR `MERGED`·이슈 `CLOSED`를
+검증합니다. 검증 PASS를 우회하거나 실패 결과를 자동으로 병합하는 경로는 없습니다.
 
 ## 상태
 
