@@ -7,12 +7,14 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 POLICY_PATH = REPO_ROOT / "harness" / "orchestration-policy.json"
+RISK_POLICY_PATH = REPO_ROOT / "harness" / "risk-policy.json"
 
 
 class OrchestrationPolicyTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.policy = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
+        cls.risk_policy = json.loads(RISK_POLICY_PATH.read_text(encoding="utf-8"))
 
     def test_role_slots_are_fixed(self) -> None:
         slots = self.policy["roleSlots"]
@@ -36,6 +38,68 @@ class OrchestrationPolicyTest(unittest.TestCase):
             self.assertFalse(roles[role]["writer"])
             self.assertTrue(roles[role]["readOnly"])
             self.assertEqual("none", roles[role]["writeScope"])
+
+    def test_vcs_capability_matrix_is_explicit(self) -> None:
+        expected = {
+            "implementation": {
+                "read": True,
+                "writeProductFiles": True,
+                "writeScope": "manifest.allowedPaths",
+                "commit": True,
+                "push": False,
+                "merge": False,
+            },
+            "verification": {
+                "read": True,
+                "writeProductFiles": False,
+                "writeScope": "none",
+                "commit": False,
+                "push": False,
+                "merge": False,
+            },
+            "qa": {
+                "read": True,
+                "writeProductFiles": False,
+                "writeScope": "none",
+                "commit": False,
+                "push": False,
+                "merge": False,
+            },
+            "pr-review": {
+                "read": True,
+                "writeProductFiles": False,
+                "writeScope": "none",
+                "commit": False,
+                "push": False,
+                "merge": False,
+            },
+            "main-orchestrator": {
+                "read": True,
+                "writeProductFiles": False,
+                "writeScope": "none",
+                "commit": False,
+                "push": True,
+                "merge": True,
+            },
+        }
+        assert self.policy["vcsCapabilities"] == expected
+
+    def test_dockerfile_paths_are_classified_as_multi_instance_runtime(self) -> None:
+        multi_instance_rule = next(
+            rule
+            for rule in self.risk_policy["rules"]
+            if rule["id"] == "multi-instance-runtime"
+        )
+
+        self.assertTrue(
+            {"Dockerfile", "docker/Dockerfile"}.issubset(
+                multi_instance_rule["patterns"]
+            )
+        )
+        self.assertEqual(
+            {"multi-instance", "completion"},
+            set(multi_instance_rule["risks"]),
+        )
 
     def test_limits_and_state_machine_are_explicit(self) -> None:
         self.assertEqual(

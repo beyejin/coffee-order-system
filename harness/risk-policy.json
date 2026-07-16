@@ -321,6 +321,7 @@
       "id": "multi-instance-runtime",
       "patterns": [
         "Dockerfile",
+        "docker/Dockerfile",
         "compose.yaml",
         "nginx/**",
         "scripts/multi-instance-smoke.sh"
