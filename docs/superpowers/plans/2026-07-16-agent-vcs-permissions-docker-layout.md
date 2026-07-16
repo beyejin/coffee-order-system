@@ -151,9 +151,11 @@ build:
   dockerfile: docker/Dockerfile
 ```
 
-- [ ] **Step 3: Classify the new path**
+- [ ] **Step 3: Classify both sides of the rename**
 
-Replace the multi-instance risk pattern `Dockerfile` with `docker/Dockerfile`.
+Retain the multi-instance risk pattern `Dockerfile` for rename-source
+classification and add `docker/Dockerfile` for the new path. Both paths must
+be classified by `multi-instance-runtime`.
 
 - [ ] **Step 4: Validate Compose parsing**
 
