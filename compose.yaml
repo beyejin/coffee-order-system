@@ -30,7 +30,9 @@ services:
       - coffee_redis_data:/data
 
   app1:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
     environment:
       DB_URL: jdbc:mysql://mysql:3306/coffee?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
       DB_USERNAME: root
@@ -54,7 +56,9 @@ services:
       start_period: 10s
 
   app2:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
     environment:
       DB_URL: jdbc:mysql://mysql:3306/coffee?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
       DB_USERNAME: root
