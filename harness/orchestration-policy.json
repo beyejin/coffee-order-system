@@ -78,6 +78,48 @@
       ]
     }
   },
+  "vcsCapabilities": {
+    "implementation": {
+      "read": true,
+      "writeProductFiles": true,
+      "writeScope": "manifest.allowedPaths",
+      "commit": true,
+      "push": false,
+      "merge": false
+    },
+    "verification": {
+      "read": true,
+      "writeProductFiles": false,
+      "writeScope": "none",
+      "commit": false,
+      "push": false,
+      "merge": false
+    },
+    "qa": {
+      "read": true,
+      "writeProductFiles": false,
+      "writeScope": "none",
+      "commit": false,
+      "push": false,
+      "merge": false
+    },
+    "pr-review": {
+      "read": true,
+      "writeProductFiles": false,
+      "writeScope": "none",
+      "commit": false,
+      "push": false,
+      "merge": false
+    },
+    "main-orchestrator": {
+      "read": true,
+      "writeProductFiles": false,
+      "writeScope": "none",
+      "commit": false,
+      "push": true,
+      "merge": true
+    }
+  },
   "limits": {
     "maxRepairLoops": 3,
     "maxPrReviewRereviews": 2,
