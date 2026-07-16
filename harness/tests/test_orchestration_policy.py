@@ -37,6 +37,51 @@ class OrchestrationPolicyTest(unittest.TestCase):
             self.assertTrue(roles[role]["readOnly"])
             self.assertEqual("none", roles[role]["writeScope"])
 
+    def test_vcs_capability_matrix_is_explicit(self) -> None:
+        expected = {
+            "implementation": {
+                "read": True,
+                "writeProductFiles": True,
+                "writeScope": "manifest.allowedPaths",
+                "commit": True,
+                "push": False,
+                "merge": False,
+            },
+            "verification": {
+                "read": True,
+                "writeProductFiles": False,
+                "writeScope": "none",
+                "commit": False,
+                "push": False,
+                "merge": False,
+            },
+            "qa": {
+                "read": True,
+                "writeProductFiles": False,
+                "writeScope": "none",
+                "commit": False,
+                "push": False,
+                "merge": False,
+            },
+            "pr-review": {
+                "read": True,
+                "writeProductFiles": False,
+                "writeScope": "none",
+                "commit": False,
+                "push": False,
+                "merge": False,
+            },
+            "main-orchestrator": {
+                "read": True,
+                "writeProductFiles": False,
+                "writeScope": "none",
+                "commit": False,
+                "push": True,
+                "merge": True,
+            },
+        }
+        assert self.policy["vcsCapabilities"] == expected
+
     def test_limits_and_state_machine_are_explicit(self) -> None:
         self.assertEqual(
             {
