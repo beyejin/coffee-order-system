@@ -375,20 +375,5 @@
       "harness.unit",
       "gradle.test"
     ]
-  },
-  "implementedChecks": [
-    "scope.allowed-paths",
-    "risk.classification",
-    "risk.declaration",
-    "harness.unit",
-    "gradle.test",
-    "oracle.architecture",
-    "oracle.api-contract",
-    "oracle.migration-fresh",
-    "oracle.migration-upgrade",
-    "oracle.transaction",
-    "oracle.cross-domain-concurrency",
-    "oracle.async-isolation",
-    "oracle.multi-instance"
-  ]
+  }
 }

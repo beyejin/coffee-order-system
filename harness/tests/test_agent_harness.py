@@ -168,7 +168,6 @@ def make_policy(rules: tuple[object, ...] | None = None) -> object:
         rules=rules,
         protected_patterns=("scripts/agent-harness.py",),
         risk_checks={risk: (f"dummy.{risk}",) for risk in known_risks},
-        implemented_checks=frozenset(),
     )
 
 
@@ -609,9 +608,9 @@ class StateAndPlanTest(unittest.TestCase):
             with self.assertRaisesRegex(HARNESS.HarnessViolation, "중복 pattern"):
                 HARNESS.load_risk_policy(policy_path)
 
-    def test_policy_rejects_unknown_implemented_check(self) -> None:
+    def test_policy_rejects_removed_implemented_checks_field(self) -> None:
         payload = json.loads(SOURCE_POLICY.read_text(encoding="utf-8"))
-        payload["implementedChecks"].append("oracle.unknown")
+        payload["implementedChecks"] = []
 
         with tempfile.TemporaryDirectory() as directory:
             policy_path = Path(directory) / "policy.json"
@@ -620,7 +619,7 @@ class StateAndPlanTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with self.assertRaisesRegex(HARNESS.HarnessViolation, "riskChecks에 없는"):
+            with self.assertRaisesRegex(HARNESS.HarnessViolation, "최상위 필드"):
                 HARNESS.load_risk_policy(policy_path)
 
 

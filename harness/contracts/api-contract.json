@@ -1,12 +1,6 @@
 {
   "schemaVersion": 1,
   "documentation": "docs/api-spec.md",
-  "controllersRoot": "src/main/java",
-  "responseWrapper": {
-    "success": "boolean",
-    "data": "object-or-array-or-null",
-    "error": "object-or-null"
-  },
   "endpoints": [
     {
       "method": "GET",
