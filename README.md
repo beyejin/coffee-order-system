@@ -65,6 +65,24 @@ KAFKA_ENABLED=true KAFKA_BOOTSTRAP_SERVERS=localhost:29092 ./gradlew bootRun
 
 두 애플리케이션 인스턴스와 Kafka Consumer concurrency까지 함께 보려면 `docker compose up -d --build --wait`를 사용합니다. Compose의 app 서비스는 Kafka를 켠 상태로 실행되고, Kafka UI에서 topic의 message·partition·consumer group을 확인할 수 있습니다.
 
+Kafka UI와 같은 관찰 값을 CLI로 확인하려면 다음 명령을 사용합니다.
+
+```bash
+# topic과 Partition 수
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server kafka:9092 --describe --topic orders.paid
+
+# message payload, key, Partition, offset
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
+  --bootstrap-server kafka:9092 --topic orders.paid --from-beginning \
+  --max-messages 10 --timeout-ms 10000 \
+  --property print.key=true --property print.partition=true --property print.offset=true
+
+# Consumer Group의 Partition 할당과 lag
+docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh \
+  --bootstrap-server kafka:9092 --describe --group coffee-order-data-platform
+```
+
 ## 요구사항과 범위
 
 | 기능 | API | 핵심 제약 |
