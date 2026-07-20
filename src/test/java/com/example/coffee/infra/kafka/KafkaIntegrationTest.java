@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
@@ -44,7 +45,8 @@ import org.testcontainers.kafka.KafkaContainer;
 class KafkaIntegrationTest {
 
 	@Container
-	static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka:3.8.0");
+	static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka:3.8.0")
+			.withStartupTimeout(Duration.ofMinutes(2));
 
 	@Autowired
 	private OrderService orderService;
