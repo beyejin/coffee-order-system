@@ -255,6 +255,19 @@
       ]
     },
     {
+      "id": "kafka-boundary",
+      "patterns": [
+        "src/main/java/com/example/coffee/infra/kafka/**"
+      ],
+      "risks": [
+        "architecture",
+        "concurrency",
+        "async",
+        "multi-instance",
+        "completion"
+      ]
+    },
+    {
       "id": "flyway-migration",
       "patterns": [
         "src/main/resources/db/migration/**"
