@@ -1,0 +1,49 @@
+{
+  "issue": 11,
+  "targetBranch": "main",
+  "objective": "주문 결제 커밋 이후 주문 이벤트를 Kafka로 발행하고 Consumer Group이 이를 수신하도록 연동하며 Partition 기반 병렬 처리와 Kafka UI 관찰 경로를 제공한다.",
+  "allowedPaths": [
+    "harness/plans/issue-11-kafka-order-events.json",
+    "harness/risk-policy.json",
+    "build.gradle",
+    "src/main/resources/application.yaml",
+    "src/main/java/com/example/coffee/infra/dataplatform/MockDataPlatformClient.java",
+    "src/main/java/com/example/coffee/infra/kafka/**",
+    "src/test/java/com/example/coffee/infra/kafka/**",
+    "compose.yaml",
+    "README.md",
+    "docs/strategy.md",
+    "docs/rules/policy.md",
+    "docs/context-map.md",
+    "docs/logs/kafka.md"
+  ],
+  "acceptanceCriteria": [
+    "주문 트랜잭션이 커밋된 뒤에만 Kafka orders.paid topic으로 JSON 주문 메시지를 발행한다.",
+    "Kafka broker 장애가 주문 API 응답과 MySQL 주문·잔액·이력 트랜잭션을 롤백시키지 않는다.",
+    "실제 Kafka broker 통합 테스트에서 Producer payload가 Consumer Group에 의해 수신되고 key·payload·partition·offset을 확인한다.",
+    "동일 userId key의 메시지는 같은 순서 보장 단위로 발행되며 topic은 최소 3개 Partition으로 생성된다.",
+    "Consumer concurrency와 재처리 가능한 offset/error-handler 설정이 코드와 문서에 드러난다.",
+    "Compose에서 Kafka, Kafka UI, MySQL, Redis, 두 app 인스턴스를 함께 기동하고 Kafka UI 관찰 명령을 제공한다.",
+    "기존 MySQL 주문·포인트·Redis·다중 인스턴스 회귀 테스트가 통과한다.",
+    "./gradlew clean test --console plain, docker compose config --quiet, git diff --check가 성공한다."
+  ],
+  "declaredRisks": [
+    "scope",
+    "architecture",
+    "transaction",
+    "concurrency",
+    "async",
+    "multi-instance",
+    "completion"
+  ],
+  "contractChanges": [
+    "harness/risk-policy.json v2",
+    "docs/rules/policy.md v2"
+  ],
+  "nonGoals": [
+    "Outbox, DLT, schema registry, Kafka Streams, 정산 집계 추가",
+    "주문 API 계약과 주문 DB schema 변경",
+    "Kafka를 MySQL 단독 개발 실행에 강제",
+    "기존 주문 트랜잭션 경계를 Kafka publish 내부로 이동"
+  ]
+}

@@ -11,9 +11,40 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+      retries: 3
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        '[enable.idempotence]': true
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:coffee-order-data-platform}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        '[spring.json.trusted.packages]': com.example.coffee.domain.order.event
+        '[spring.json.value.default.type]': com.example.coffee.domain.order.event.OrderDataMessage
+    listener:
+      ack-mode: manual
+      missing-topics-fatal: false
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       connect-timeout: ${REDIS_CONNECT_TIMEOUT:500ms}
       timeout: ${REDIS_TIMEOUT:500ms}
+app:
+  kafka:
+    enabled: ${KAFKA_ENABLED:false}
+    topic: ${KAFKA_TOPIC:orders.paid}
+    topic-partitions: ${KAFKA_TOPIC_PARTITIONS:3}
+    producer:
+      timeout: ${KAFKA_PRODUCER_TIMEOUT:10s}
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:coffee-order-data-platform}
+      concurrency: ${KAFKA_CONSUMER_CONCURRENCY:1}

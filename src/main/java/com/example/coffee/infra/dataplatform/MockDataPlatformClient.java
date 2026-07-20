@@ -5,9 +5,11 @@ import java.lang.System.Logger.Level;
 
 import com.example.coffee.domain.order.event.OrderDataMessage;
 import com.example.coffee.domain.order.service.DataPlatformClient;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConditionalOnProperty(name = "app.kafka.enabled", havingValue = "false", matchIfMissing = true)
 public class MockDataPlatformClient implements DataPlatformClient {
 
 	private static final Logger LOGGER = System.getLogger(MockDataPlatformClient.class.getName());

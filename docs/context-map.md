@@ -12,6 +12,7 @@
 | `domain/order` | 주문 시점 가격 스냅샷, 결제 트랜잭션, 결제 완료 이벤트 | `menu`, `user`, `point` |
 | `domain/ranking` | 최근 7일 주문 집계와 상위 3개 조회 | `order`, `menu`, Redis read model port |
 | `infra/dataplatform` | 커밋된 주문의 외부 데이터 플랫폼 전송 | `order`의 이벤트·포트 |
+| `infra/kafka` | 활성화된 Kafka broker로 주문 이벤트 발행·Consumer Group 수신 | `order`의 데이터 메시지, Spring Kafka |
 | `infra/redis` | 커밋된 주문의 인기 메뉴 ZSET read model 반영·조회 | `domain/ranking`의 port, `order` 이벤트 |
 | `global` | 공통 시간, 응답, 예외 변환 | 모든 API 계층 |
 
@@ -27,6 +28,8 @@ sequenceDiagram
     participant Orders as OrderRepository
     participant Event as OrderPaidEvent
     participant Platform as OrderDataPlatformEventListener
+    participant Kafka as Kafka orders.paid
+    participant Consumer as Kafka Consumer Group
     participant Ranking as PopularMenuRedisEventListener
 
     API->>Order: order(userId, menuId)
@@ -39,13 +42,17 @@ sequenceDiagram
     Order-->>API: 트랜잭션 커밋 후 응답
     Event-->>Platform: AFTER_COMMIT + 비동기 전달
     Platform-->>Platform: 데이터 플랫폼 전송
+    Platform-->>Kafka: Kafka enabled 시 key=userId JSON publish
+    Kafka-->>Consumer: Group offset 기반 수신
+    Consumer-->>Consumer: partition·offset 관찰/handler 처리
     Event-->>Ranking: AFTER_COMMIT 동기 전달
     Ranking-->>Ranking: menu별 Redis ZSET에 orderId·UTC microsecond score 저장
 ```
 
 - `OrderService.order()` 하나의 트랜잭션에서 잔액, 사용 이력, 주문을 함께 변경합니다.
 - 커밋 전 예외가 발생하면 세 DB 변경은 모두 롤백되고 `AFTER_COMMIT` 리스너는 실행되지 않습니다.
-- 외부 전송은 커밋 이후 비동기로 실행됩니다. 전송 실패는 이미 커밋된 주문을 롤백하지 않으며 현재 구현은 경고 로그만 남깁니다.
+- 외부 전송은 커밋 이후 비동기로 실행됩니다. 기본 Mock 전송은 즉시 로그로 끝나고, Kafka가 활성화되면 Producer acknowledgement까지 기다린 뒤 실패를 경고 로그로 남깁니다. 어느 경우에도 이미 커밋된 주문을 롤백하지 않습니다.
+- Kafka Consumer는 `orders.paid` topic을 `coffee-order-data-platform` Group으로 구독하고 Compose에서는 concurrency 3을 사용합니다. `userId` key는 같은 사용자의 순서를 같은 Partition에 묶는 기준입니다.
 - 커밋 전 예외에서는 랭킹 리스너가 실행되지 않아 실패한 주문이 Redis에 반영되지 않습니다.
 - Redis가 정상인 경우 인기 메뉴는 menu별 ZSET의 `[to - 7일, to)` `ZCOUNT` 결과를 사용하고, Redis 오류 시 `OrderRepository.findPopularMenus`로 fallback합니다.
 
